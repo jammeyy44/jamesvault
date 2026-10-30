@@ -240,6 +240,33 @@ def test_if_the_balance_cannot_be_verified_nothing_is_removed(api, make_player, 
     assert r.status_code == 502 and GameAccount.query.one().status == "active"
 
 
+class NotFoundBalance(SandboxGateway):
+    reason = "User not found"
+
+    def get_balance(self, account):
+        err = GatewayError("The game provider could not complete that request. Please try again later.")
+        err.reason = self.reason
+        raise err
+
+
+def test_a_login_the_provider_does_not_know_can_be_removed(api, make_player, game, sandbox, monkeypatch):
+    make_player(api)
+    get_access(api)
+    monkeypatch.setattr("app.routes.site.accounts.get_gateway", lambda: NotFoundBalance())
+    assert api.delete('/api/v1/games/game-vault/access').status_code == 200
+    assert GameAccount.query.one().status == "removed"
+
+
+def test_other_provider_errors_still_block_removal(api, make_player, game, sandbox, monkeypatch):
+    make_player(api)
+    get_access(api)
+    gw = NotFoundBalance()
+    gw.reason = "5: Access IP is not whitelisted"
+    monkeypatch.setattr("app.routes.site.accounts.get_gateway", lambda: gw)
+    r = api.delete('/api/v1/games/game-vault/access')
+    assert r.status_code == 502 and GameAccount.query.one().status == "active"
+
+
 def test_a_failed_recreate_leaves_the_removed_login_removed(api, make_player, game, sandbox, monkeypatch):
     make_player(api)
     get_access(api)

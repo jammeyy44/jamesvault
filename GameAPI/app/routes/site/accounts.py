@@ -205,7 +205,15 @@ def remove_access(slug):
         return json_error("You have a request in progress for this game. Try again once it is finished.", 409, code="pending")
     try:
         balance = gateway.get_balance(acct)
+    except GatewayError as e:
+        reason = (getattr(e, "reason", None) or "").lower()
+        if "not found" in reason or reason.startswith("8:"):
+            balance = Decimal("0")  # the provider has no such player, so there is nothing in it to protect
+        else:
+            return json_error("We couldn't check the game balance, so the login was not removed. Please try again in a minute. "
+                              "If it keeps happening, contact support.", 502, code="provider_error")
     except Exception:
+        logger.exception("remove_access: balance check failed")
         return json_error("We couldn't check the game balance, so the login was not removed. Please try again.", 502, code="provider_error")
     if Decimal(balance) >= Decimal("0.01"):
         return json_error(f"This login still has ${Decimal(balance):.2f}. Cash out or use it first, then remove it.", 409, code="has_balance")

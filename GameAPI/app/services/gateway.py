@@ -142,7 +142,9 @@ class ProviderGateway:
             if not isinstance(result, dict) or result.get("error"):
                 err = result.get("error") if isinstance(result, dict) else "unexpected response"
                 self._log(provider, action, False, err, started)
-                raise GatewayError("The game provider could not complete that request. Please try again later.")
+                failure = GatewayError("The game provider could not complete that request. Please try again later.")
+                failure.reason = str(err)[:200]  # the provider's own reason (for admins and for "player not found" checks)
+                raise failure
             self._log(provider, action, True, None, started)
             return result
         except GatewayError as e:
