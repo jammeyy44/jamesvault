@@ -174,6 +174,11 @@ def create_app(config_class: type = Config) -> Flask:
     api.add_namespace(category4_ns)
     api.add_namespace(category5_ns)
     api.add_namespace(vblink_ns)
+
+    @api.errorhandler(KeyError)
+    def _missing_field(error):
+        return {"error": f"Missing field: {error.args[0] if error.args else 'value'}"}, 400
+
     api.init_app(app)
 
     from app.routes.site import site_bp

@@ -35,6 +35,17 @@ if JV_ENV == "production" and os.getenv("SECRET_KEY", _DEFAULT_SECRET) == _DEFAU
     raise RuntimeError("SECRET_KEY must be set to a strong random value when JV_ENV=production")
 
 
+def _secret_key():
+    """The well-known default key would let anyone forge a session cookie, so it is never used: without a real SECRET_KEY
+    a random key is made for this process (sessions then end on every restart)."""
+    key = os.getenv("SECRET_KEY", "").strip()
+    if key and key != _DEFAULT_SECRET:
+        return key
+    import secrets
+    print("WARNING: SECRET_KEY is not set; using a temporary random key. Set SECRET_KEY in .env (logins reset on restart).")
+    return secrets.token_hex(32)
+
+
 if JV_ENV == "production" and _flag("JV_SANDBOX", False):
     raise RuntimeError("JV_SANDBOX must not be enabled when JV_ENV=production")
 if JV_ENV == "production" and not _flag("JV_RATE_LIMITS", True):
@@ -43,7 +54,7 @@ if JV_ENV == "production" and not _flag("JV_RATE_LIMITS", True):
 
 class Config:
     """Configuration class for Flask app."""
-    SECRET_KEY = os.getenv("SECRET_KEY", _DEFAULT_SECRET)
+    SECRET_KEY = _secret_key()
     JV_ENV = JV_ENV
     # Uploaded game thumbnails live here (use a persistent volume in production). Requests are capped to keep uploads small.
     UPLOAD_DIR = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads"))

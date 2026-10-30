@@ -6,13 +6,15 @@ export function generateStaticParams() {
   return Object.keys(legalDocs).map((doc) => ({ doc }));
 }
 
-export function generateMetadata({ params }: { params: { doc: string } }): Metadata {
-  const d = legalDocs[params.doc];
-  return d ? { title: d.title, alternates: { canonical: `/legal/${params.doc}` } } : {};
+export async function generateMetadata({ params }: { params: Promise<{ doc: string }> }): Promise<Metadata> {
+  const { doc } = await params;
+  const d = legalDocs[doc];
+  return d ? { title: d.title, alternates: { canonical: `/legal/${doc}` } } : {};
 }
 
-export default function LegalPage({ params }: { params: { doc: string } }) {
-  const d = legalDocs[params.doc];
+export default async function LegalPage({ params }: { params: Promise<{ doc: string }> }) {
+  const { doc } = await params;
+  const d = legalDocs[doc];
   if (!d) notFound();
   return (
     <div className="container-x max-w-3xl py-10">

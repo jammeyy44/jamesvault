@@ -14,7 +14,7 @@ from app.models_site import (
     SupportTicket, TicketMessage, iso,
 )
 from app.utils.auth import (
-    audit, csrf_token, current_player, json_error, player_required, rate_limit, rate_limited, utcnow,
+    audit, csrf_token, current_player, json_error, player_required, limiter_ident, rate_limit, rate_limited, utcnow,
 )
 from app.services import bonus
 from app.utils.mailer import send_email
@@ -46,6 +46,7 @@ def _start_session(player):
     session.clear()
     session.permanent = True
     session['player_id'] = player.id
+    session['sv'] = player.session_version or 0
     csrf_token()  # fresh token for the new session (prevents fixation)
 
 
@@ -103,7 +104,9 @@ def login():
     ident = (data.get('identifier') or '').strip().lower()
     password = data.get('password') or ''
     ip = request.remote_addr or '?'
-    if rate_limited(f"login-ip:{ip}", 20, 900) or rate_limited(f"login-id:{ident}", 8, 900):
+    ip = limiter_ident()
+    if rate_limited(f"login-ip:{ip}", 20, 900) or rate_limited(f"login-id:{ident}:{ip}", 8, 900) \
+            or rate_limited(f"login-id-all:{ident}", 60, 900):
         return json_error("Too many attempts. Please wait and try again.", 429)
     player = Player.query.filter(func.lower(Player.username) == ident).first() or \
         Player.query.filter_by(email=ident).first()
@@ -122,6 +125,10 @@ def login():
 
 @site_bp.route('/auth/logout', methods=['POST'])
 def logout():
+    pid = session.get('player_id')
+    if pid:
+        Player.query.filter_by(id=pid).update({"session_version": Player.session_version + 1}, synchronize_session=False)
+        db.session.commit()  # a copied cookie must not survive the logout
     session.clear()
     return jsonify({"ok": True, "csrf_token": csrf_token()})
 
@@ -170,6 +177,7 @@ def reset_password():
     if problem:
         return json_error(problem)
     player.set_password(data['password'])
+    player.session_version = (player.session_version or 0) + 1
     PasswordResetToken.query.filter_by(player_id=player.id, used_at=None, purpose='reset').update({"used_at": utcnow()})
     _notify(player.id, "Your password was changed", "If this wasn't you, contact support immediately.")
     audit("player.password_reset", actor_type="player", actor_id=player.id)
@@ -227,6 +235,7 @@ def change_password():
     if problem:
         return json_error(problem)
     player.set_password(data['new_password'])
+    player.session_version = (player.session_version or 0) + 1  # signs out every other device
     _notify(player.id, "Your password was changed", "If this wasn't you, contact support immediately.")
     audit("player.password_change")
     db.session.commit()

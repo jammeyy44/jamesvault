@@ -43,6 +43,8 @@ class Player(db.Model):
     referred_by_id = db.Column(db.Integer, db.ForeignKey('players.id'), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     last_login_at = db.Column(db.DateTime, nullable=True)
+    # Bumped on logout / password change / reset: any session cookie issued before that stops working.
+    session_version = db.Column(db.Integer, nullable=False, default=0, server_default='0')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)

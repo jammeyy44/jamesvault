@@ -17,7 +17,7 @@ from app.models_site import (
     AuditLog, BonusBox, CashRequest, CatalogGame, Notification, Player, Promotion, PromotionClaim, Referral, SupportTicket,
     TicketMessage, Tournament, TournamentEntry, WheelPrize, WheelSpin, iso,
 )
-from app.utils.auth import admin_required, audit, current_player, json_error, utcnow
+from app.utils.auth import admin_required, audit, current_player, hash_service_token, json_error, utcnow
 
 from . import site_bp
 
@@ -426,7 +426,7 @@ def admin_token_create():
     db.session.add(account)
     db.session.flush()
     raw = secrets.token_urlsafe(32)
-    db.session.add(Token(account_id=account.id, token=raw, valid_until=utcnow() + timedelta(days=days)))
+    db.session.add(Token(account_id=account.id, token=hash_service_token(raw), valid_until=utcnow() + timedelta(days=days)))
     audit("token.create", target=account.username)
     db.session.commit()
     return jsonify({"token": raw, "note": "Copy this now; it is not shown again."}), 201

@@ -85,8 +85,12 @@ def _evaluate_loss_streak(player_id: int):
             voided_amount = luck_reward(prev_count)
 
     claimable = luck_reward(losses)
+    # Identifies this streak: it changes only when a claim or a cashout happens, so a second (racing) claim of the same
+    # streak builds the same claim_key and is stopped by the unique constraint.
+    epoch = f"{last_claim.id if last_claim else 0}-{last_cashout.id if last_cashout else 0}"
 
     return {
+        "epoch": epoch,
         "losses": losses,
         "claimable": claimable,
         "tiers": [{"deposits": need, "diamonds": diamonds} for need, diamonds in reversed(LUCK_TIERS)],
@@ -219,7 +223,7 @@ def claim_loss_streak():
     if st["claimable"] < 1:
         return json_error(f"You need at least {LUCK_MIN_DEPOSITS} consecutive deposits without cashout to claim diamonds.", 400)
     diamonds = st["claimable"]
-    claim_key = f"loss_streak:{player.id}:{utcnow().strftime('%Y%m%d%H%M%S%f')}"
+    claim_key = f"loss_streak:{player.id}:{st['epoch']}"
     claim = TaskClaim(player_id=player.id, task_key="loss_streak", claim_key=claim_key, diamonds=diamonds)
     db.session.add(claim)
     try:

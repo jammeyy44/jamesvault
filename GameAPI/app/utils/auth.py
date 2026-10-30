@@ -28,6 +28,11 @@ def _bearer_token():
     return None
 
 
+def hash_service_token(raw):
+    import hashlib
+    return "sha256:" + hashlib.sha256(raw.encode()).hexdigest()
+
+
 def require_service_auth(func):
     """Guard for provider operations: logged-in admin or a valid, unexpired API token."""
     @wraps(func)
@@ -39,7 +44,8 @@ def require_service_auth(func):
         from app.models import Token
         raw = _bearer_token()
         if raw:
-            token = Token.query.filter_by(token=raw, is_deleted=False).first()
+            token = Token.query.filter_by(token=hash_service_token(raw), is_deleted=False).first() \
+                or Token.query.filter_by(token=raw, is_deleted=False).first()  # tokens made before hashing
             if token and token.valid_until > utcnow():
                 token.usage_count = (token.usage_count or 0) + 1
                 db.session.commit()
@@ -92,6 +98,31 @@ def client_ip():
 
 # --- rate limiting (per-process; put a shared limiter at the proxy for multi-worker deployments)
 _hits = defaultdict(deque)
+_windows = {}
+_calls = [0]
+
+
+def _sweep(now):
+    """Forget keys whose window has passed, so the table cannot grow without bound."""
+    for key in [k for k, q in _hits.items() if not q or now - q[-1] > _windows.get(k, 3600)]:
+        _hits.pop(key, None)
+        _windows.pop(key, None)
+    if len(_hits) > 50000:  # still too many live keys (flood): start over rather than exhaust memory
+        _hits.clear()
+        _windows.clear()
+
+
+def limiter_ident():
+    """Who a rate-limit counts against. Behind trusted proxies (TRUSTED_PROXY_COUNT hops, e.g. Vercel + nginx = 2) the
+    address that the first trusted proxy saw is used; anything a client prepends to X-Forwarded-For is ignored."""
+    from flask import current_app
+    hops = int(current_app.config.get("TRUSTED_PROXY_COUNT", 0) or 0)
+    xff = [p.strip() for p in request.headers.get("X-Forwarded-For", "").split(",") if p.strip()]
+    if hops > 0 and len(xff) >= hops:
+        return xff[-hops][:64]
+    if hops > 0:
+        return (request.remote_addr or "?")[:64]
+    return (xff[0] if xff else request.remote_addr or "?")[:64]
 
 
 def rate_limited(key, limit, window_seconds):
@@ -100,6 +131,10 @@ def rate_limited(key, limit, window_seconds):
     if not current_app.config.get("RATE_LIMITS_ENABLED", True):
         return False
     now = time.monotonic()
+    _calls[0] += 1
+    if _calls[0] % 500 == 0:
+        _sweep(now)
+    _windows[key] = window_seconds
     q = _hits[key]
     while q and now - q[0] > window_seconds:
         q.popleft()
@@ -113,7 +148,7 @@ def rate_limit(name, limit, window_seconds):
     def deco(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            ident = request.headers.get("X-Forwarded-For", request.remote_addr or "?").split(",")[0].strip()
+            ident = limiter_ident()
             if rate_limited(f"{name}:{ident}", limit, window_seconds):
                 return json_error("Too many requests. Please try again later.", 429)
             return func(*args, **kwargs)
@@ -145,6 +180,8 @@ def current_player():
         return None
     if getattr(g, "_player", None) is None or g._player.id != pid:
         g._player = db.session.get(Player, pid)
+    if g._player is not None and session.get("sv", 0) != (g._player.session_version or 0):
+        return None  # cookie issued before a logout / password change
     return g._player
 
 
