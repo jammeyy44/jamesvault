@@ -7,11 +7,10 @@ import { Badge, EmptyState, ErrorState, Notice, PageHeader, Skeleton } from "@/c
 import { Button } from "@/components/ui/button";
 import { useApi } from "@/lib/use-api";
 import { useAuth } from "@/lib/auth";
-import { formatDay } from "@/lib/utils";
+import { formatDay, referralLink } from "@/lib/utils";
 
 type Referrals = {
   code: string;
-  link: string;
   rules: string;
   bonus: string;
   counts: { pending: number; confirmed: number; rejected: number };
@@ -23,20 +22,21 @@ export default function ReferPage() {
   const { data, loading, error, reload } = useApi<Referrals>(player ? "/referrals/me" : null);
   const [copied, setCopied] = useState(false);
 
+  const link = data ? referralLink(data.code) : "";
   const copy = async () => {
-    await navigator.clipboard.writeText(data!.link);
+    try { await navigator.clipboard.writeText(link); } catch { /* clipboard blocked: the link is selectable in the box */ }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
   const share = async () => {
-    if (navigator.share) await navigator.share({ title: "Join me", url: data!.link }).catch(() => {});
+    if (navigator.share) await navigator.share({ title: "Join me on stakesweep.net", text: "Join me on stakesweep.net with my link:", url: link }).catch(() => {});
     else copy();
   };
 
   return (
     <div className="container-x py-10">
       <PageHeader eyebrow="Refer a Friend" title="Invite friends, get rewarded">
-        Share your personal link. Rewards are granted only after staff verify a qualifying event.
+        Share your personal link. When a friend who joins with it makes their first deposit, bonus balance is added to your account.
       </PageHeader>
       {authLoading ? (
         <Skeleton className="h-48" />
@@ -58,7 +58,7 @@ export default function ReferPage() {
               <p className="text-sm font-semibold text-muted">Your referral code</p>
               <p className="gradient-text mt-1 text-3xl font-black tracking-widest">{data.code}</p>
               <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-                <input readOnly value={data.link} className="field" aria-label="Referral link" onFocus={(e) => e.target.select()} />
+                <input readOnly value={link} className="field" aria-label="Referral link" onFocus={(e) => e.target.select()} />
                 <Button onClick={copy} variant="secondary">
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "Copied" : "Copy"}
                 </Button>

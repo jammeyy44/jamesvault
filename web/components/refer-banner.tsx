@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Check, Copy, Gift, UserPlus, Users } from "lucide-react";
 import { Diamond } from "./art";
 import { Button } from "./ui/button";
+import { referralLink } from "@/lib/utils";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
@@ -17,8 +18,8 @@ export function ReferBanner() {
   const copy = async () => {
     setError(false);
     try {
-      const r = await api<{ link: string }>("/referrals/me");
-      await navigator.clipboard.writeText(r.link);
+      const r = await api<{ code: string }>("/referrals/me");
+      await navigator.clipboard.writeText(referralLink(r.code));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch { setError(true); }
