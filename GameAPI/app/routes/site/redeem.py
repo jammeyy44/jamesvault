@@ -41,11 +41,29 @@ def view(r):
             "created_at": iso(r.created_at)}
 
 
+def _added_to_game(acct):
+    """Cash and bonus the player has added to this game since their last completed redeem (what the current play is funded by)."""
+    last = (RedeemRequest.query.filter_by(game_account_id=acct.id, status='completed')
+            .order_by(RedeemRequest.id.desc()).first())
+    q = CashRequest.query.filter_by(game_account_id=acct.id, status='completed')
+    if last:
+        q = q.filter(CashRequest.created_at > last.created_at)
+    cash = bonus = Decimal("0")
+    for r in q:
+        if r.source == 'bonus':
+            bonus += Decimal(r.amount)
+        else:
+            cash += Decimal(r.amount)
+    session = "Cash + Bonus" if cash and bonus else "Bonus" if bonus else "Cash"
+    return {"cash": f"{cash:.2f}", "bonus": f"{bonus:.2f}", "session": session}
+
+
 def _preview(player, game, acct):
     """Everything the player (and the redeem call) needs to know. Reads the live game balance."""
     out = {"game": game.name, "table": rules.TABLE, "note": rules.NOTE, "sandbox": _mode() == "sandbox",
            "latest_deposit": None, "rule": None, "game_balance": None, "payout": None, "voided": None,
-           "can_redeem": False, "needs_confirm": False, "reason": None, "_dep": None, "_rule": None, "_balance": None}
+           "can_redeem": False, "needs_confirm": False, "reason": None, "_dep": None, "_rule": None, "_balance": None,
+           "added": _added_to_game(acct)}
     gateway = get_gateway()
     if gateway is None:
         out["reason"] = "Redeeming is not available yet."
@@ -181,3 +199,16 @@ def sandbox_win(slug):
                                processed_at=utcnow()))
     db.session.commit()
     return jsonify({"added": f"{amount:.2f}"}), 201
+
+
+@site_bp.route('/cashout-rules')
+def cashout_rules_public():
+    """The cashout table and the headline limits, for the 'Cashout limits' popup. No account or provider call needed."""
+    return jsonify({
+        "table": rules.TABLE, "note": rules.NOTE,
+        "facts": {
+            "min_deposit": "$" + format(current_app.config["DEPOSIT_MIN"].normalize(), "f"),
+            "max_redeem": f"${rules.CAP_CENTS // 100}",
+            "min_wallet_cashout": "$" + format(current_app.config["CASHOUT_MIN"].normalize(), "f"),
+        },
+    })

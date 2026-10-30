@@ -31,10 +31,76 @@ type Access = {
 };
 
 type CashResult = { status: string; sandbox: boolean; amount: string; note: string | null; source?: "wallet" | "bonus" };
+type LimitsInfo = { table: { deposit: string; min: string; max: string }[]; note: string; facts: { min_deposit: string; max_redeem: string; min_wallet_cashout: string } };
+
+/** Shown once, right after a login is created: the cashout rules, straight from the server's table. */
+function CashoutLimitsModal({ onDone }: { onDone: () => void }) {
+  const [info, setInfo] = useState<LimitsInfo | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { api<LimitsInfo>("/cashout-rules").then(setInfo).catch(() => setFailed(true)); }, []);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onDone(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onDone]);
+
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/80 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="Cashout limits" data-testid="limits-modal">
+      <div className="relative my-auto w-full max-w-md rounded-3xl border border-white/10 bg-[#0B0F1A] p-5 text-white shadow-[0_30px_80px_rgba(0,0,0,0.7)] sm:p-6">
+        <button onClick={onDone} aria-label="Close" className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-400 transition hover:text-white"><X className="h-4 w-4" /></button>
+        <h2 className="px-8 text-center text-2xl font-black uppercase tracking-[0.12em] sm:text-3xl">Cashout <span className="text-[#A78BFA]">Limits</span></h2>
+
+        {failed ? (
+          <p className="mt-6 rounded-2xl bg-white/5 p-4 text-sm text-slate-300">We couldn&apos;t load the limits right now. You can see them any time on the Cash Out screen.</p>
+        ) : !info ? (
+          <div className="grid h-48 place-items-center"><Spinner className="h-6 w-6 text-sky-400" /></div>
+        ) : (
+          <>
+            <div className="mt-5 overflow-hidden rounded-2xl border border-white/10">
+              <table className="w-full text-left" data-testid="limits-table">
+                <thead className="bg-[#121826] text-xs font-extrabold uppercase tracking-wider text-blue-400">
+                  <tr><th className="px-4 py-3">Deposit</th><th className="px-3 py-3">Minimum</th><th className="px-3 py-3">Maximum</th></tr>
+                </thead>
+                <tbody className="text-sm">
+                  {info.table.map((row) => (
+                    <tr key={row.deposit} className="border-t border-white/[0.06]">
+                      <td className="px-4 py-3.5 font-bold text-white">{row.deposit}</td>
+                      <td className="px-3 py-3.5 font-semibold text-slate-300">{row.min}</td>
+                      <td className="px-3 py-3.5 font-semibold text-slate-300">{row.max}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-4 grid grid-cols-3 gap-2.5">
+              {([["Min deposit", info.facts.min_deposit], ["Max per redeem", info.facts.max_redeem], ["Min wallet cashout", info.facts.min_wallet_cashout]] as const).map(([label, value]) => (
+                <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.03] px-2 py-3 text-center">
+                  <p className="text-[10px] font-semibold uppercase leading-tight tracking-wider text-slate-400">{label}</p>
+                  <p className="mt-1.5 text-lg font-extrabold text-cyan-300">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-sm font-semibold text-amber-300">
+              <Info className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>NOTE: {info.note.replace(/^Winning amount/i, "winning").replace(/\.$/, "")}.</span>
+            </div>
+            <p className="mt-2 text-center text-[11px] text-slate-500">x3 / x12 mean 3 / 12 times the cash you added.</p>
+          </>
+        )}
+
+        <button onClick={onDone} data-testid="limits-understand" className="mt-4 h-12 w-full rounded-2xl bg-gradient-to-r from-[#3B82F6] to-[#8B5CF6] text-base font-black text-white shadow-lg transition hover:brightness-110 active:scale-[0.98]">I Understand</button>
+      </div>
+    </div>
+  );
+}
+
 type RedeemPreview = {
   table: { deposit: string; min: string; max: string }[]; note: string; sandbox: boolean; latest_deposit: string | null;
   rule: { row: number; deposit: string; min: string; max: string } | null; game_balance: string | null; payout: string | null;
   voided: string | null; can_redeem: boolean; needs_confirm: boolean; reason: string | null;
+  added?: { cash: string; bonus: string; session: string };
 };
 type RedeemResult = { status: string; payout: string; voided: string; note: string | null };
 
@@ -76,6 +142,7 @@ export default function FullscreenGamePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showCredsModal, setShowCredsModal] = useState(false);
+  const [showLimits, setShowLimits] = useState(false);
   const [creds, setCreds] = useState<{ username: string; password: string } | null>(null);
   const [credError, setCredError] = useState<string | null>(null);
   const [showPass, setShowPass] = useState(false);
@@ -170,7 +237,7 @@ export default function FullscreenGamePage() {
     try {
       const res = await api<Access>(`/games/${slug}/access`, { method: "POST" });
       setAccess(res);
-      setShowCredsModal(true); // Open Login Details popup immediately
+      setShowLimits(true); // the cashout limits come first; "I Understand" then opens the login details
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -426,6 +493,10 @@ export default function FullscreenGamePage() {
         )}
       </div>
 
+      {showLimits && (
+        <CashoutLimitsModal onDone={() => { setShowLimits(false); setShowCredsModal(true); }} />
+      )}
+
       {/* Login Details Modal Dialog (Screenshot 4) */}
       {showCredsModal && (
         <FullscreenLoginDetailsModal
@@ -658,11 +729,14 @@ function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: ()
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showRules, setShowRules] = useState(false);
   const [result, setResult] = useState<RedeemResult | null>(null);
   const key = useRef<string | null>(null);
 
   const load = useCallback(async () => {
-    try { setP(await api<RedeemPreview>(`/games/${state.game.slug}/redeem`)); setError(null); } catch (e) { setError(errorMessage(e)); }
+    setRefreshing(true);
+    try { setP(await api<RedeemPreview>(`/games/${state.game.slug}/redeem`)); setError(null); } catch (e) { setError(errorMessage(e)); } finally { setRefreshing(false); }
   }, [state.game.slug]);
   useEffect(() => { load(); }, [load]);
 
@@ -675,70 +749,132 @@ function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: ()
     } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
   };
 
+  const bal = p?.game_balance != null ? Number(p.game_balance) : null;
+  const willCredit = p?.can_redeem ? Number(p.payout ?? 0) : bal !== null && p?.rule ? Math.min(bal, Number(p.rule.max)) : null;
+  const belowMin = !!p && !p.can_redeem && !!p.rule && bal !== null && bal < Number(p.rule.min);
+  const added = p?.added;
+
   return (
-    <div>
-      <div className="flex items-center justify-between pb-4 border-b border-white/10">
-        <h2 className="text-xl font-black text-white">Cash Out from {state.game.name}</h2>
-        <button onClick={onBack} className="text-xs font-bold text-sky-400 hover:underline">← Back to Game</button>
+    <div data-testid="cashout-screen">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-black text-white">Cash Out</h2>
+        <button onClick={onBack} aria-label="Close" className="grid h-9 w-9 place-items-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white"><X className="h-5 w-5" /></button>
       </div>
 
-      <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm" data-testid="how-cashout">
-        <p className="font-bold text-white">How cashout works</p>
-        <ol className="mt-2 list-decimal space-y-1 pl-5 text-white/70">
-          <li>Add cash to this game (from your wallet or your bonus balance) and play.</li>
-          <li>The <b>latest cash you added to this game</b> sets how much you can redeem: a minimum and a maximum (see the table below). Adding under $5 does not unlock redeeming.</li>
-          <li>Press Redeem. Your whole game balance leaves the game and the allowed amount is added to your <b>wallet</b>. Anything above the maximum is voided, and you confirm that first.</li>
-          <li>One redeem per cash added. To redeem again, add cash to the game again.</li>
-          <li>From your wallet you can then cash out to your payment method (minimum $50).</li>
-        </ol>
-        <p className="mt-3 rounded-xl bg-[#ffd966]/10 p-3 text-[#ffd966]"><b>Bonus balance:</b> it can only be added to a game, never withdrawn directly. Cash added from bonus counts like any other cash added, so the same table and limits apply to what you win with it.</p>
+      {/* game + login + live balance */}
+      <div className="mt-4 flex items-center gap-4 rounded-2xl border border-white/10 bg-black/30 p-4">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={getGameCover(state.game)} alt="" className="h-16 w-16 shrink-0 rounded-xl border border-white/10 object-cover" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-lg font-extrabold text-white">{state.game.name}</p>
+          <p className="mt-0.5 text-xs text-slate-400">Login</p>
+          <p className="truncate font-mono text-sm text-slate-200">{state.account?.username}</p>
+        </div>
+        <div className="shrink-0 text-right">
+          <button onClick={load} aria-label="Refresh balance" className="text-slate-400 transition hover:text-white"><RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} /></button>
+          <p className="mt-1 text-xs text-slate-400">Balance</p>
+          <p className="text-xl font-black text-white" data-testid="redeem-balance">{bal !== null ? money2(bal) : "—"}</p>
+        </div>
       </div>
+
       {!p && !error && <div className="grid h-32 place-items-center"><Spinner className="h-6 w-6 text-sky-400" /></div>}
+
       {p && (
         <>
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-4"><p className="text-xs text-slate-400">Game balance</p><p className="mt-1 text-2xl font-black text-white">{p.game_balance !== null ? money2(p.game_balance) : "—"}</p></div>
-            <div className="rounded-2xl bg-white/5 border border-white/10 p-4"><p className="text-xs text-slate-400">Latest deposit</p><p className="mt-1 text-2xl font-black text-white">{p.latest_deposit ? money2(p.latest_deposit) : "—"}</p></div>
+          {/* what funded this play */}
+          <div className="mt-4 space-y-3.5 rounded-2xl border border-white/10 bg-black/30 p-5 text-[15px]">
+            <div className="flex items-center justify-between"><span className="text-slate-400">Session</span><span className="font-bold text-white" data-testid="redeem-session">{added?.session ?? "Cash"}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400">Cash added to game</span><span className="font-bold text-sky-400" data-testid="redeem-cash-added">{money2(added?.cash ?? 0)}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400">Bonus added to game</span><span className="font-bold text-[#ffd966]" data-testid="redeem-bonus-added">{money2(added?.bonus ?? 0)}</span></div>
+            <div className="flex items-center justify-between"><span className="text-slate-400">Game balance (full)</span><span className="font-bold text-white">{bal !== null ? money2(bal) : "—"}</span></div>
+            {p.needs_confirm && <div className="flex items-center justify-between"><span className="text-slate-400">Voided (above maximum)</span><span className="font-bold text-rose-400" data-testid="redeem-voided">{money2(p.voided ?? 0)}</span></div>}
+            <div className="flex items-center justify-between"><span className="text-slate-400">Will be credited to wallet</span><span className="font-bold text-emerald-400" data-testid="redeem-payout">{willCredit !== null ? money2(willCredit) : "—"}</span></div>
           </div>
-          {p.rule && (
-            <p className="mt-3 rounded-2xl bg-white/5 border border-white/10 p-3 text-xs text-slate-300">
-              Your latest deposit sets your limits: redeem <b>at least {money2(p.rule.min)}</b> and <b>at most {money2(p.rule.max)}</b>.
-            </p>
+
+          {/* cashout range, with the detailed rules behind the (i) */}
+          <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-5 py-4 text-sm" data-testid="redeem-rule">
+            <span className="text-slate-400">
+              Cashouts range{" "}
+              {p.rule ? <b className="text-white">from {money(p.rule.min)} to {money(p.rule.max)}</b> : <b className="text-white">unlocks when you add $5 or more</b>}
+            </span>
+            <button onClick={() => setShowRules(true)} aria-label="Cashout rules in detail" data-testid="redeem-info"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-white/15 bg-white/5 text-xs font-black italic text-slate-300 transition hover:bg-white/10 hover:text-white">i</button>
+          </div>
+
+          {p.needs_confirm && (
+            <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-sm text-rose-200">
+              <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} data-testid="redeem-confirm" className="mt-0.5 h-4 w-4 accent-rose-400" />
+              <span>I understand {money2(p.voided ?? 0)} above my maximum will be voided and cannot be recovered.</span>
+            </label>
           )}
 
-          {p.can_redeem ? (
-            <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
-              <div className="flex justify-between text-xs"><span className="text-slate-400">Added to your wallet</span><span className="text-lg font-black text-emerald-300">{money2(p.payout ?? 0)}</span></div>
-              {p.needs_confirm && (
-                <>
-                  <div className="mt-2 flex justify-between text-xs"><span className="text-slate-400">Voided (above max)</span><span className="text-lg font-black text-rose-300">{money2(p.voided ?? 0)}</span></div>
-                  <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl bg-rose-500/10 p-2.5 text-xs text-rose-200">
-                    <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} className="mt-0.5 h-4 w-4 accent-rose-400" />
-                    <span>I understand {money2(p.voided ?? 0)} above my max will be voided and cannot be recovered.</span>
-                  </label>
-                </>
-              )}
+          {!p.can_redeem && p.reason && (
+            <div role="alert" className="mt-3 flex items-start gap-3 rounded-2xl border border-rose-500/30 bg-rose-950/40 p-4 text-sm text-rose-200" data-testid="redeem-reason">
+              <Info className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
+              <div>
+                <p className="font-bold text-rose-400">{belowMin ? "Below Minimum Cashout!" : "Can't cash out yet"}</p>
+                <p className="mt-0.5">{belowMin && p.rule ? `You must have at least ${money2(p.rule.min)} in the game to cash out.` : p.reason}</p>
+              </div>
             </div>
-          ) : p.reason && <p className="mt-3 rounded-2xl bg-amber-300/10 border border-amber-300/20 p-3 text-xs text-amber-100">{p.reason}</p>}
+          )}
         </>
       )}
 
-      {error && <p role="alert" className="mt-3 rounded-2xl bg-rose-500/15 p-3 text-xs text-rose-200">{error}</p>}
+      {error && <p role="alert" className="mt-3 rounded-2xl bg-rose-500/15 p-3 text-sm text-rose-200">{error}</p>}
       {result && (
-        <p role="status" className={cn("mt-3 rounded-2xl p-3 text-xs", result.status === "completed" ? "bg-emerald-500/15 text-emerald-200" : "bg-amber-300/10 text-amber-100")}>
-          {result.status === "completed" ? `${money2(result.payout)} was added to your wallet.` : result.note ?? "Could not complete redeem."}
+        <p role="status" data-testid="redeem-result" className={cn("mt-3 rounded-2xl p-3 text-sm", result.status === "completed" ? "bg-emerald-500/15 text-emerald-200" : "bg-amber-300/10 text-amber-100")}>
+          {result.status === "completed" ? `${money2(result.payout)} was added to your wallet${Number(result.voided) > 0 ? ` (${money2(result.voided)} above your maximum was voided)` : ""}.` : result.note ?? "Could not complete the cash out."}
         </p>
       )}
 
-      <div className="mt-6 flex gap-3">
-        <button className="flex-1 h-12 rounded-2xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-sm transition active:scale-95 shadow-md disabled:opacity-50"
-          onClick={submit} disabled={busy || !p?.can_redeem || (p.needs_confirm && !confirm)}>
-          {busy ? <Spinner /> : null} Confirm Cash Out
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <button className="h-14 rounded-2xl bg-[#38bdf8] text-base font-black text-slate-950 shadow-md transition hover:bg-[#0ea5e9] active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
+          data-testid="redeem-submit" onClick={submit} disabled={busy || !p?.can_redeem || (p.needs_confirm && !confirm)}>
+          {busy ? <Spinner /> : "Cash Out"}
         </button>
-        <button className="h-12 px-6 rounded-2xl border border-white/10 bg-[#182035] hover:bg-[#1f2942] text-white font-bold text-sm transition"
-          onClick={onBack}>
-          Back
-        </button>
+        <button className="h-14 rounded-2xl border border-white/10 bg-black/40 text-base font-bold text-white transition hover:bg-white/10" onClick={onBack}>Close</button>
+      </div>
+
+      {showRules && p && <CashoutRulesDetail table={p.table} note={p.note} rule={p.rule} onClose={() => setShowRules(false)} />}
+    </div>
+  );
+}
+
+/** The (i) popup: how cashout works, the full limits table (the player's row highlighted), and what bonus money does. */
+function CashoutRulesDetail({ table, note, rule, onClose }: { table: RedeemPreview["table"]; note: string; rule: RedeemPreview["rule"]; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/80 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="Cashout rules" data-testid="rules-detail"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="relative my-auto w-full max-w-md rounded-3xl border border-white/10 bg-[#0B0F1A] p-5 text-white shadow-2xl sm:p-6">
+        <button onClick={onClose} aria-label="Close" className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-400 transition hover:text-white"><X className="h-4 w-4" /></button>
+        <h3 className="pr-10 text-xl font-black">How cashout works</h3>
+        <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-slate-300" data-testid="how-cashout">
+          <li>Add cash to this game (from your wallet or your bonus balance) and play.</li>
+          <li>The <b>latest cash you added to this game</b> sets how much you can redeem: a minimum and a maximum (table below). Adding under $5 does not unlock cashing out.</li>
+          <li>Press Cash Out. Your whole game balance leaves the game and the allowed amount is added to your <b>wallet</b>. Anything above the maximum is voided, and you confirm that first.</li>
+          <li>One cash out per cash added. To cash out again, add cash to the game again.</li>
+          <li>From your wallet you can then withdraw to your payment method (minimum $50).</li>
+        </ol>
+        <div className="mt-4 overflow-hidden rounded-2xl border border-white/10">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-[#121826] text-[11px] font-extrabold uppercase tracking-wider text-blue-400"><tr><th className="px-4 py-2.5">Cash added</th><th className="px-3 py-2.5">Minimum</th><th className="px-3 py-2.5">Maximum</th></tr></thead>
+            <tbody>
+              {table.map((row, i) => (
+                <tr key={row.deposit} className={cn("border-t border-white/[0.06]", rule?.row === i && "bg-sky-500/15")}>
+                  <td className="px-4 py-2.5 font-bold">{row.deposit}</td><td className="px-3 py-2.5 text-slate-300">{row.min}</td><td className="px-3 py-2.5 text-slate-300">{row.max}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="mt-2 text-xs text-slate-400">x3 / x12 mean 3 / 12 times the cash you added. {note}</p>
+        <p className="mt-3 rounded-xl bg-[#ffd966]/10 p-3 text-sm text-[#ffd966]"><b>Bonus balance:</b> it can only be added to a game, never withdrawn directly. Cash added from bonus counts like any other cash added, so the same table and limits apply to what you win with it.</p>
+        <button onClick={onClose} className="mt-4 h-12 w-full rounded-2xl bg-gradient-to-r from-[#3B82F6] to-[#8B5CF6] text-base font-black text-white transition hover:brightness-110 active:scale-[0.98]">Got it</button>
       </div>
     </div>
   );

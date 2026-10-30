@@ -43,3 +43,31 @@ def test_claiming_awards_the_tier_once_and_restarts_the_streak(api, make_player)
     assert db.session.get(Player, me["id"]).diamonds == before + 15
     assert api.get('/api/v1/bonus/loss-streak').get_json()["losses"] == 0   # streak restarted
     assert api.post('/api/v1/bonus/loss-streak/claim').status_code == 400   # nothing left to claim
+
+
+def test_cashout_rules_are_public_and_match_the_redeem_table(api):
+    r = api.get('/api/v1/cashout-rules')
+    assert r.status_code == 200
+    body = r.get_json()
+    assert body["table"][0] == {"deposit": "$5", "min": "$50", "max": "$50"} and len(body["table"]) == 6
+    assert body["facts"] == {"min_deposit": "$5", "max_redeem": "$500", "min_wallet_cashout": "$50"}
+    assert "voided" in body["note"]
+
+
+def test_redeem_preview_says_how_much_cash_and_bonus_was_added(api, make_player, monkeypatch):
+    from app.models_site import CatalogGame, GameAccount, CashRequest
+    from app.services.gateway import SandboxGateway
+    me = make_player(api)
+    g = CatalogGame(slug="game-vault", name="Game Vault", category="Slots")
+    db.session.add(g)
+    db.session.flush()
+    acct = GameAccount(player_id=me["id"], game_id=g.id, provider_username="gv1", password_enc="x", status="active", sandbox=True)
+    db.session.add(acct)
+    db.session.flush()
+    for amount, source in (("5.00", "wallet"), ("3.00", "bonus"), ("2.00", "bonus")):
+        db.session.add(CashRequest(player_id=me["id"], game_account_id=acct.id, amount=amount, source=source, status="completed",
+                                   idempotency_key=f"k-{amount}-{source}"))
+    db.session.commit()
+    monkeypatch.setitem(api.app.config["FEATURES"] if hasattr(api, "app") else __import__("app").app.config["FEATURES"], "sandbox", True)
+    body = api.get('/api/v1/games/game-vault/redeem').get_json()
+    assert body["added"] == {"cash": "5.00", "bonus": "5.00", "session": "Cash + Bonus"}
