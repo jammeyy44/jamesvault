@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { Check, CheckCheck, Headset, Paperclip, Send, X } from "lucide-react";
+import { Check, CheckCheck, MessageCircleMore, Paperclip, Send, X } from "lucide-react";
 import { Spinner } from "./ui/bits";
 import { api, errorMessage, upload } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -163,11 +163,11 @@ export function LiveOperator() {
         <button
           onClick={() => setOpen((v) => !v)} aria-label={hasReply ? `Live operator: ${unread} new ${unread === 1 ? "reply" : "replies"}` : "Live operator"}
           aria-expanded={open} data-testid="operator-button"
-          className={cn("group relative grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9] text-white shadow-[0_10px_30px_rgba(124,58,237,0.5)] ring-1 ring-white/25 transition hover:-translate-y-0.5 hover:shadow-[0_14px_36px_rgba(124,58,237,0.65)] active:scale-95",
+          className={cn("group relative grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-[#14b8a6] to-[#0e7490] text-white shadow-[0_10px_30px_rgba(20,184,166,0.5)] ring-1 ring-white/25 transition hover:-translate-y-0.5 hover:shadow-[0_14px_36px_rgba(20,184,166,0.65)] active:scale-95",
             hasReply && !reduce && "animate-[blink_1s_ease-in-out_infinite]")}>
           {hasReply && !reduce && <span className="absolute inset-0 -z-10 animate-ping rounded-full bg-emerald-400/50" aria-hidden />}
           {hasReply && <span className={cn("absolute inset-0 rounded-full ring-[3px] ring-emerald-300", !reduce && "animate-[blink_1s_ease-in-out_infinite]")} aria-hidden />}
-          {open ? <X className="h-6 w-6" /> : <Headset className={cn("h-7 w-7", hasReply && !reduce && "animate-[wiggle_1.1s_ease-in-out_infinite]")} strokeWidth={1.8} />}
+          {open ? <X className="h-6 w-6" /> : <MessageCircleMore className={cn("h-7 w-7", hasReply && !reduce && "animate-[wiggle_1.1s_ease-in-out_infinite]")} strokeWidth={1.8} />}
           {!open && player && !hasReply && online && <span className="absolute right-0.5 top-0.5 h-3.5 w-3.5 rounded-full bg-emerald-400 ring-2 ring-[#0B0E17]" aria-hidden />}
           {hasReply && (
             <span data-testid="operator-badge" className="absolute -right-1 -top-1 grid h-5 min-w-[1.25rem] place-items-center rounded-full bg-emerald-400 px-1 text-[11px] font-black text-slate-950 ring-2 ring-[#0B0E17]">
@@ -184,9 +184,9 @@ export function LiveOperator() {
             initial={reduce ? false : { opacity: 0, y: 16, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12, scale: 0.97 }}
             transition={{ duration: 0.2 }}
             className="fixed bottom-24 right-3 z-[46] flex h-[min(34rem,calc(100vh-8rem))] w-[calc(100vw-1.5rem)] max-w-sm flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0E1424] text-white shadow-[0_24px_60px_rgba(0,0,0,0.6)] sm:right-5">
-            <header className="flex items-center gap-3 border-b border-white/10 bg-gradient-to-r from-[#2A1B5C] to-[#1B1F4A] px-4 py-3">
-              <span className="relative grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9]">
-                <Headset className="h-5 w-5" strokeWidth={1.8} />
+            <header className="flex items-center gap-3 border-b border-white/10 bg-gradient-to-r from-[#0c3b45] to-[#13294b] px-4 py-3">
+              <span className="relative grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-[#14b8a6] to-[#0e7490]">
+                <MessageCircleMore className="h-5 w-5" strokeWidth={1.8} />
                 {player && <span className={cn("absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full ring-2 ring-[#1B1F4A]", online ? "bg-emerald-400" : "bg-slate-500")} aria-hidden />}
               </span>
               <div className="min-w-0 flex-1">
@@ -216,7 +216,7 @@ export function LiveOperator() {
                     const tick = m.pending ? "sending" : m.id <= seenUpto ? "seen" : "delivered";
                     return (
                       <div key={m.id} className={cn("flex", mine ? "justify-end" : "justify-start")}>
-                        <div className={cn("max-w-[82%] rounded-2xl px-3.5 py-2 text-sm", mine ? "rounded-br-md bg-gradient-to-br from-[#7C3AED] to-[#5B21B6]" : "rounded-bl-md border border-white/10 bg-white/[0.06]", m.pending && "opacity-70")}>
+                        <div className={cn("max-w-[82%] rounded-2xl px-3.5 py-2 text-sm", mine ? "rounded-br-md bg-gradient-to-br from-[#0d9488] to-[#0e7490]" : "rounded-bl-md border border-white/10 bg-white/[0.06]", m.pending && "opacity-70")}>
                           {!mine && <p className="mb-0.5 text-[11px] font-bold text-emerald-300">{m.operator ?? "Operator"}</p>}
                           {m.file && m.kind === "photo" && (
                             // eslint-disable-next-line @next/next/no-img-element
