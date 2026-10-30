@@ -6,7 +6,7 @@ from app import db
 from app.models_site import (
     Notification, PaymentMethodSetting, PaymentOrder, Player, WebhookDelivery, WithdrawalOrder, iso,
 )
-from app.services import wallet as ledger
+from app.services import telegram as tg, wallet as ledger
 from app.services.payments import PaymentError, get_payments
 from app.utils.auth import admin_required, audit, json_error, utcnow
 
@@ -170,6 +170,8 @@ def admin_unmatched_resolve(did):
             return json_error("This payment was already credited.", 409)
         row.credited = True
         _notify(player.id, "Deposit received", f"${ledger.fmt(row.amount_cents)} was added to your wallet.")
+        tg.queue_deposit_alert(db.session, ref=row.external_id, username=player.username, email=player.email,
+                               amount_cents=row.amount_cents, method="Direct payment (matched by staff)")
         audit("wallet.manual_credit", target=str(did), detail={"player": player.id, "cents": row.amount_cents})
     else:
         audit("wallet.unmatched_dismissed", target=str(did))

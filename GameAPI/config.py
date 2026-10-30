@@ -66,6 +66,11 @@ class Config:
     PAYDORA_BASE_URL = os.getenv("PAYDORA_BASE_URL", "https://cpcs.paydora.net/api/v1")
     PAYDORA_API_KEY = os.getenv("PAYDORA_API_KEY", "")
     PAYDORA_WEBHOOK_SECRET = os.getenv("PAYDORA_WEBHOOK_SECRET", "")
+    # Telegram bridge (live chat + deposit alerts). Secrets come from the environment only; see app/services/telegram.py.
+    TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    TELEGRAM_GROUP_ID = os.getenv("TELEGRAM_GROUP_ID", "")
+    TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+    TELEGRAM_DEPOSIT_TOPIC_ID = os.getenv("TELEGRAM_DEPOSIT_TOPIC_ID", "")
     # Number of reverse proxies in front of Flask that append to X-Forwarded-For (0 = use the socket address).
     TRUSTED_PROXY_COUNT = int(os.getenv("TRUSTED_PROXY_COUNT", 0))
     SANDBOX_WELCOME_DIAMONDS = 30  # test diamonds for new accounts, ONLY when JV_SANDBOX is on (never in production)

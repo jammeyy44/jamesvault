@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import Link from "next/link";
-import { LifeBuoy } from "lucide-react";
+import { LiveOperator } from "@/components/live-operator";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { Header } from "@/components/header";
@@ -32,10 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Header />
           <main id="main" className="min-h-[60vh]">{children}</main>
           <Footer />
-          <Link href="/support" aria-label="Contact support"
-            className="fixed bottom-5 right-5 z-30 grid h-12 w-12 place-items-center rounded-full bg-brand-gradient text-white shadow-lift transition hover:-translate-y-0.5">
-            <LifeBuoy className="h-5 w-5" />
-          </Link>
+          <LiveOperator />
         </AuthProvider>
       </body>
     </html>

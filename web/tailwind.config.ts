@@ -27,6 +27,9 @@ const config: Config = {
         glow: "0 0 25px -5px rgba(56, 189, 248, 0.4)",
       },
       borderRadius: { xl2: "1.25rem", xl3: "1.75rem" },
+      keyframes: {
+        wiggle: { "0%, 100%": { transform: "rotate(-9deg)" }, "50%": { transform: "rotate(9deg)" } },
+      },
       fontFamily: {
         sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
       },

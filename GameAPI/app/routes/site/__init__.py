@@ -40,4 +40,4 @@ def health():
         return jsonify({"status": "database_unavailable"}), 503
 
 
-from . import public, player, accounts, admin, admin_providers, wallet, admin_wallet, bonus, admin_bonus, wheel, redeem, coupons  # noqa: E402,F401
+from . import public, player, accounts, admin, admin_providers, wallet, admin_wallet, bonus, admin_bonus, wheel, redeem, coupons, chat  # noqa: E402,F401

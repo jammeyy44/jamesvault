@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.models_site import PaymentMethodSetting, PaymentOrder, WalletEntry, WithdrawalOrder, iso
-from app.services import bonus, cashout_rules
+from app.services import bonus, cashout_rules, telegram as tg
 from app.services import wallet as ledger
 from app.services.payments import ACCEPTED_AMOUNTS, PAYOUT_FIELDS, PaymentError, get_payments, normalize_value, payments_mode
 from app.utils.auth import audit, client_ip, current_player, json_error, player_required, rate_limit, utcnow
@@ -173,6 +173,8 @@ def create_deposit():
         ledger.credit(player.id, order.amount_cents, 'deposit', 'payment_order', order.id)
         order.status, order.paid_at = 'paid', utcnow()
         bonus.grant_deposit_bonus(order)
+        tg.queue_deposit_alert(db.session, ref=order.reference_id or f"DEP-{order.id}", username=player.username, email=player.email,
+                               amount_cents=order.amount_cents, method=order.method_name, sandbox=True)
     audit("wallet.deposit_created", target=str(order.id), detail={"amount_cents": order.amount_cents, "method": method["value"]})
     db.session.commit()
     return jsonify(_deposit_view(order)), 201

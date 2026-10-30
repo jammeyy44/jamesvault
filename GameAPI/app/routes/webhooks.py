@@ -17,8 +17,8 @@ from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from app import db
-from app.models_site import Notification, PaymentOrder, WebhookDelivery, WithdrawalOrder
-from app.services import bonus, wallet as ledger
+from app.models_site import ChatMessage, Notification, PaymentOrder, Player, SupportChat, WebhookDelivery, WithdrawalOrder
+from app.services import bonus, telegram as tg, wallet as ledger
 from app.services.payments import PaymentError, get_payments
 from app.utils.auth import audit, utcnow
 
@@ -115,6 +115,7 @@ def _handle(event, data, delivery):
                 extra = bonus.grant_deposit_bonus(order)
                 _notify(order.player_id, "Deposit received", f"${ledger.fmt(cents)} was added to your wallet."
                         + (f" Plus ${ledger.fmt(extra)} Deposit Boost bonus." if extra else ""))
+                _deposit_alert(order, cents)
                 audit("wallet.deposit_credited", target=str(order.id), actor_type="system",
                       detail={"cents": cents, "delivery": delivery.delivery_id})
                 delivery.credited = True
@@ -171,3 +172,47 @@ def _handle(event, data, delivery):
     delivery.handled = False
     delivery.summary = f"unhandled event {event}"[:400]
     return None
+
+
+def _deposit_alert(order, cents):
+    """Queue the Telegram deposit alert; it is sent only if the surrounding transaction commits."""
+    player = db.session.get(Player, order.player_id)
+    if player is None:
+        return
+    tg.queue_deposit_alert(db.session, ref=order.reference_id or f"DEP-{order.id}", username=player.username, email=player.email,
+                           amount_cents=cents, method=order.method_name, sandbox=bool(order.sandbox))
+
+
+# ---------------------------------------------------------------- Telegram: replies from the support group
+@hooks_bp.route('/telegram', methods=['POST'])
+def telegram_webhook():
+    """Telegram calls this for every message in the support group. Authentic only if the secret header matches.
+    A message inside a player's topic from a (non-bot) group member is that player's operator reply."""
+    secret = str(current_app.config.get("TELEGRAM_WEBHOOK_SECRET") or "")
+    if not secret or not tg.configured():
+        return jsonify({"error": "not configured"}), 503
+    given = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not hmac.compare_digest(given.encode(), secret.encode()):
+        return jsonify({"error": "forbidden"}), 403
+
+    msg = (request.get_json(silent=True) or {}).get("message") or {}
+    sender = msg.get("from") or {}
+    text = (msg.get("text") or msg.get("caption") or "").strip()
+    has_media = any(k in msg for k in ("photo", "document", "video", "voice", "sticker", "audio"))
+    thread = msg.get("message_thread_id")
+    if (str((msg.get("chat") or {}).get("id")) != tg.group_id() or not thread or sender.get("is_bot")
+            or text.startswith("/") or not (text or has_media)):
+        return jsonify({"ok": True})  # not a reply we care about (other chat, General topic, a bot, a command, a service message)
+
+    chat = SupportChat.query.filter_by(telegram_topic_id=int(thread)).first()
+    if chat is None:
+        return jsonify({"ok": True})
+    body = text if text else "📎 The support team sent an attachment (it can't be shown here)."
+    name = (sender.get("first_name") or sender.get("username") or "Support")[:40]
+    db.session.add(ChatMessage(chat_id=chat.id, sender='operator', body=body[:2000], operator_name=name,
+                               telegram_message_id=msg.get("message_id")))
+    try:
+        db.session.commit()
+    except IntegrityError:  # Telegram re-delivered an update we already stored
+        db.session.rollback()
+    return jsonify({"ok": True})

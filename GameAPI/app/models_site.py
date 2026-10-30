@@ -675,3 +675,28 @@ class CouponRedemption(db.Model):
     player_id = db.Column(db.Integer, db.ForeignKey('players.id'), nullable=False, index=True)
     amount_cents = db.Column(db.Integer, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+class SupportChat(db.Model):
+    """One live-chat conversation per player; telegram_topic_id is the player's topic in the support supergroup."""
+    __tablename__ = 'support_chats'
+
+    id = db.Column(db.Integer, primary_key=True)
+    player_id = db.Column(db.Integer, db.ForeignKey('players.id'), unique=True, nullable=False)
+    telegram_topic_id = db.Column(db.BigInteger, unique=True, nullable=True)
+    player_read_id = db.Column(db.Integer, nullable=False, default=0, server_default='0')  # last operator message the player has seen
+    last_player_message_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+class ChatMessage(db.Model):
+    __tablename__ = 'chat_messages'
+    __table_args__ = (db.UniqueConstraint('chat_id', 'sender', 'telegram_message_id', name='uq_chat_tg_message'),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('support_chats.id'), nullable=False, index=True)
+    sender = db.Column(db.String(10), nullable=False)  # player | operator
+    body = db.Column(db.Text, nullable=False)
+    operator_name = db.Column(db.String(60), nullable=True)
+    telegram_message_id = db.Column(db.BigInteger, nullable=True)  # lets a re-delivered webhook be ignored
+    created_at = db.Column(db.DateTime, nullable=False, default=utcnow)

@@ -129,3 +129,12 @@ Baseline before changes was 1 test, failing. All current tests pass.
 
 ## Coupons
 Admin -> Coupons (superadmin): create a code worth bonus cash for **one person** (assigned by username/email) or **many people** (each account once, optional total cap, optional expiry). Players enter it under "Have a coupon?" on the home page; it is credited to the bonus balance instantly. Once-per-account is enforced by a database unique constraint; wrong, foreign and unknown codes get the same answer so codes cannot be probed. Run `python seed_site.py` once to create the new tables.
+
+## Live operator chat and deposit alerts (Telegram)
+Players write to the team from the floating headset icon; the bot posts each player's messages into their own topic (named with their username) in a Telegram supergroup, and anyone in the group who replies in that topic is answered on the website. Every credited deposit also posts a summary into the group.
+
+1. Create the bot with @BotFather, add it to a **supergroup with Topics turned on**, and make it an **admin with "Manage Topics"** (admins also receive every message, which is how replies reach the site).
+2. In `GameAPI/.env` (never commit it): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_GROUP_ID` (starts with -100), `TELEGRAM_WEBHOOK_SECRET` (any long random string) and optionally `TELEGRAM_DEPOSIT_TOPIC_ID` (a topic for deposit alerts; empty = General).
+3. `python seed_site.py` (creates the chat tables), restart the API, then `python telegram_setup.py check` and `python telegram_setup.py webhook https://your-domain`.
+
+Without the first three values the chat icon is hidden and no alerts are sent; nothing is faked.
