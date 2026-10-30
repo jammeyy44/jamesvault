@@ -99,3 +99,30 @@ def test_bonus_balance_spending_earns_no_extra_bonus(api, make_player, game, san
     db.session.commit()
     r = api.post('/api/v1/games/game-vault/cash', {"amount": "10.00", "source": "bonus", "idempotency_key": KEY(1)}).get_json()
     assert r["bonus"] == "0.00" and _game_balance(api) == "10.00"
+
+
+def test_admin_sees_everything_about_a_player(api, make_player, game, sandbox_wallet, staff_client):
+    from app.models_site import Coupon, CouponRedemption
+    p = make_player(api)
+    _access(api)
+    _verify(p["id"])
+    fund(p["id"], 5000)
+    _cash(api, "20.00", 1)
+    c = Coupon(code="HELLO5", reward_cents=500, scope="many")
+    db.session.add(c)
+    db.session.flush()
+    db.session.add(CouponRedemption(coupon_id=c.id, player_id=p["id"], amount_cents=500))
+    db.session.commit()
+
+    r = staff_client("helper", "support").get(f'/api/v1/admin/players/{p["id"]}/profile')
+    assert r.status_code == 200
+    d = r.get_json()
+    assert d["player"]["email_verified"] is True and d["player"]["wallet"] == "30.00"
+    assert d["signup_bonus"]["claimed"] is True and d["signup_bonus"]["game"] == "Game Vault"
+    assert d["signup_bonus"]["cash_added"] == "20.00" and d["signup_bonus"]["bonus_amount"] == "10.00"
+    g = d["games"][0]
+    assert g["game"] == "Game Vault" and g["cash_added"] == "20.00" and g["bonus_added"] == "10.00"
+    assert d["coupons"][0]["code"] == "HELLO5" and d["totals"]["coupon_total"] == "5.00"
+    assert "password" not in str(d).lower()
+    # players cannot open it
+    assert api.get(f'/api/v1/admin/players/{p["id"]}/profile').status_code == 403

@@ -265,11 +265,74 @@ Hide "${row[cfg.title]}" instead?`)) {
   );
 }
 
+// ---------------------------------------------------------------- one player, everything
+function MiniTable({ title, cols, rows }: { title: string; cols: [string, string][]; rows: any[] }) {
+  return (
+    <section>
+      <h4 className="mb-1.5 text-sm font-bold">{title} <span className="font-normal text-muted">({rows.length})</span></h4>
+      {rows.length === 0 ? <p className="text-sm text-muted">None.</p> : (
+        <div className="surface overflow-x-auto"><table className="w-full text-left text-xs">
+          <thead><tr className="border-b border-line uppercase tracking-wide text-muted">{cols.map(([, h]) => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}</tr></thead>
+          <tbody className="divide-y divide-line">{rows.map((r, i) => <tr key={i}>{cols.map(([k]) => <td key={k} className="px-3 py-2"><Cell v={r[k]} /></td>)}</tr>)}</tbody>
+        </table></div>
+      )}
+    </section>
+  );
+}
+
+function Stat({ k, v }: { k: string; v: any }) {
+  return <div className="rounded-xl border border-line p-3"><p className="text-[11px] uppercase tracking-wide text-muted">{k}</p><p className="mt-0.5 break-all font-bold">{v ?? "—"}</p></div>;
+}
+
+function PlayerDetails({ id, onClose }: { id: number; onClose: () => void }) {
+  const [d, setD] = useState<any | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { api<any>(`/admin/players/${id}/profile`).then(setD).catch((e) => setErr(errorMessage(e))); }, [id]);
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Player details" onClick={onClose}>
+      <div className="mx-auto my-6 max-w-5xl space-y-5 rounded-2xl bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-bold">Player details{d ? ` · ${d.player.username}` : ""}</h3>
+          <Button size="sm" variant="secondary" onClick={onClose}>Close</Button>
+        </div>
+        {err ? <ErrorState message={err} onRetry={onClose} /> : !d ? <Skeleton className="h-60" /> : (<>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Stat k="Email" v={d.player.email} /><Stat k="Email verified" v={d.player.email_verified ? "Yes" : "No"} />
+            <Stat k="Status / role" v={`${d.player.status} / ${d.player.role}`} /><Stat k="Joined" v={formatDate(d.player.created_at)} />
+            <Stat k="Last login" v={d.player.last_login_at ? formatDate(d.player.last_login_at) : null} /><Stat k="Referred by" v={d.player.referred_by} />
+            <Stat k="Wallet" v={`$${d.player.wallet}`} /><Stat k="Bonus balance" v={`$${d.player.bonus_balance}`} />
+          </div>
+          <div className="rounded-xl border border-line p-3 text-sm">
+            <p className="font-bold">Signup bonus (50%)</p>
+            {d.signup_bonus.claimed
+              ? <p>Claimed {d.signup_bonus.claimed_at ? formatDate(d.signup_bonus.claimed_at) : ""}{d.signup_bonus.game ? <> on <b>{d.signup_bonus.game}</b>: cash added ${d.signup_bonus.cash_added}, bonus ${d.signup_bonus.bonus_amount} added straight to the game.</> : "."}</p>
+              : <p className="text-muted">{d.signup_bonus.email_verified ? "Not claimed yet (email verified)." : "Not available: email not verified."}</p>}
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Stat k="Deposited" v={`$${d.totals.deposited}`} /><Stat k="Cash added to games" v={`$${d.totals.cash_added_to_games}`} />
+            <Stat k="Game bonus received" v={`$${d.totals.game_bonus_received}`} /><Stat k="Cashed out of games (to wallet)" v={`$${d.totals.redeemed_to_wallet}`} />
+            <Stat k="Withdrawals requested" v={`$${d.totals.withdrawals_requested}`} /><Stat k="Coupons used" v={`$${d.totals.coupon_total}`} />
+            <Stat k="Referral earnings" v={`$${d.totals.referral_earned}`} /><Stat k="Diamonds" v={d.player.diamonds} />
+          </div>
+          <MiniTable title="Games & logins created" cols={[["game", "Game"], ["login_username", "Login"], ["status", "Status"], ["login_created_at", "Created"], ["cash_added", "Cash added"], ["bonus_added", "Bonus"], ["adds", "Adds"], ["cashed_out", "Cashed out"], ["cashouts", "Cashouts"]]} rows={d.games} />
+          <MiniTable title="Cash added to games" cols={[["at", "When"], ["game", "Game"], ["amount", "Cash"], ["bonus", "Bonus"], ["bonus_kind", "Bonus type"], ["source", "From"], ["status", "Status"]]} rows={d.cash_adds} />
+          <MiniTable title="Deposits" cols={[["at", "When"], ["amount", "Amount"], ["method", "Method"], ["bonus", "Bonus"], ["status", "Status"]]} rows={d.deposits} />
+          <MiniTable title="Game cashouts (game to wallet)" cols={[["at", "When"], ["game", "Game"], ["game_balance", "Game balance"], ["payout", "Paid to wallet"], ["voided", "Voided"], ["status", "Status"]]} rows={d.redeems} />
+          <MiniTable title="Withdrawals" cols={[["at", "When"], ["amount", "Amount"], ["method", "Method"], ["status", "Status"]]} rows={d.withdrawals} />
+          <MiniTable title="Coupons used" cols={[["at", "When"], ["code", "Code"], ["amount", "Amount"]]} rows={d.coupons} />
+          <MiniTable title="People they referred" cols={[["at", "When"], ["username", "Player"], ["status", "Status"], ["reward", "Referral bonus"]]} rows={d.referrals} />
+        </>)}
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------- queues
 function Queue({ name, role }: { name: string; role: Role }) {
   const q = QUEUES[name];
   const { items, error, reload } = useList(q.path);
   const [msg, setMsg] = useState<string | null>(null);
+  const [detailId, setDetailId] = useState<number | null>(null);
   const act = async (id: number, status: string) => {
     try { await api(`/admin/${q.patch}/${id}`, { method: "PATCH", body: { [q.field ?? "status"]: status } }); reload(); } catch (e) { setMsg(errorMessage(e)); }
   };
@@ -280,12 +343,14 @@ function Queue({ name, role }: { name: string; role: Role }) {
   return (
     <div className="space-y-4">
       <h2 className="text-xl font-bold">{q.label}</h2>
+      {detailId !== null && <PlayerDetails id={detailId} onClose={() => setDetailId(null)} />}
       {msg && <Notice tone="error">{msg}</Notice>}
       {error ? <ErrorState message={error} onRetry={reload} /> : !items ? <Skeleton className="h-40" /> : items.length === 0 ? <EmptyState title="Nothing to show" /> : (
         <Table columns={q.columns} rows={items} actions={
           name === "players"
             ? (r) => (
               <span className="inline-flex items-center gap-2">
+                <Button size="sm" variant="secondary" onClick={() => setDetailId(r.id)}>Details</Button>
                 {role === "superadmin" && (
                   <select aria-label={`Role for ${r.username}`} className="field w-auto py-1.5" value={r.role} onChange={(e) => setRole(r.id, e.target.value)}>
                     {["player", "support", "content", "superadmin"].map((o) => <option key={o}>{o}</option>)}
