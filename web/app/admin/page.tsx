@@ -7,7 +7,7 @@ import { Check, LogOut, Pencil, Plus, Trash2, X } from "lucide-react";
 import { Badge, EmptyState, ErrorState, Notice, Skeleton } from "@/components/ui/bits";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
-import { api, errorMessage, upload, type Role } from "@/lib/api";
+import { api, ApiError, errorMessage, upload, type Role } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -183,7 +183,14 @@ function ResourceManager({ name }: { name: string }) {
 
   const remove = async (row: any) => {
     if (!confirm(`Delete "${row[cfg.title]}"? This cannot be undone.`)) return;
-    try { await api(`/admin/${name}/${row.id}`, { method: "DELETE" }); reload(); } catch (e) { setMsg(errorMessage(e)); }
+    try { await api(`/admin/${name}/${row.id}`, { method: "DELETE" }); reload(); setMsg(null); }
+    catch (e) {
+      if (e instanceof ApiError && e.code === "has_logins" && confirm(`${e.message}
+
+Hide "${row[cfg.title]}" instead?`)) {
+        try { await api(`/admin/${name}/${row.id}`, { method: "PATCH", body: { status: "hidden" } }); setMsg(null); reload(); } catch (err) { setMsg(errorMessage(err)); }
+      } else setMsg(errorMessage(e));
+    }
   };
 
   const save = async (e: React.FormEvent<HTMLFormElement>) => {

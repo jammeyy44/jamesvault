@@ -71,3 +71,34 @@ def test_seeding_does_not_bring_back_deleted_games(app):
     db.session.commit()
     seed_site.seed_catalog()                                  # a later deploy must leave the admin's choice alone
     assert [g.slug for g in CatalogGame.query.all()] == ["game-vault"]
+
+
+# ------------------------------------------------------------------ the Admin delete button
+def test_admin_can_delete_a_game_that_only_has_favourites(app, staff_client):
+    _games()
+    root = staff_client("root", "superadmin")
+    fan = Player(username="fan2", email="fan2@example.com")
+    fan.set_password("Sup3rSecret!x")
+    db.session.add(fan)
+    db.session.flush()
+    gid = CatalogGame.query.filter_by(slug="estar").one().id
+    db.session.add(Favorite(player_id=fan.id, game_id=gid))
+    db.session.commit()
+    assert root.delete(f'/api/v1/admin/games/{gid}').status_code == 200
+    assert CatalogGame.query.filter_by(slug="estar").first() is None and Favorite.query.count() == 0
+
+
+def test_admin_cannot_delete_a_game_with_player_logins_and_is_told_to_hide_it(app, staff_client):
+    _games()
+    root = staff_client("root", "superadmin")
+    owner = Player(username="owner2", email="owner2@example.com")
+    owner.set_password("Sup3rSecret!x")
+    db.session.add(owner)
+    db.session.flush()
+    gid = CatalogGame.query.filter_by(slug="vblink").one().id
+    db.session.add(GameAccount(player_id=owner.id, game_id=gid, provider_username="x2", password_enc="x", status="active"))
+    db.session.commit()
+    r = root.delete(f'/api/v1/admin/games/{gid}')
+    assert r.status_code == 409 and r.get_json()["code"] == "has_logins" and "Hide it instead" in r.get_json()["error"]
+    assert root.patch(f'/api/v1/admin/games/{gid}', {"status": "hidden"}).status_code == 200
+    assert CatalogGame.query.get(gid).status == "hidden"

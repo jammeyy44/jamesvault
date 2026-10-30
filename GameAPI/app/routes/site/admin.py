@@ -194,6 +194,13 @@ def _register_crud(name, model, spec, enums):
         obj = db.session.get(model, oid)
         if not obj:
             return json_error("Not found", 404)
+        if name == 'games':
+            from app.models_site import Favorite, GameAccount
+            logins = GameAccount.query.filter_by(game_id=oid).count()
+            if logins:  # their logins, balances and history belong to this game: keep it, but take it off the site
+                return json_error(f"{logins} player login(s) exist for this game, so it can't be deleted without losing their history. "
+                                  "Hide it instead: it disappears from the site and everything stays on record.", 409, code="has_logins")
+            Favorite.query.filter_by(game_id=oid).delete()  # a favourite is just a bookmark: removed with the game
         db.session.delete(obj)
         try:
             audit(f"{name}.delete", target=str(oid))
