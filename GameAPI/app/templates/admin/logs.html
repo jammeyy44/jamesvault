@@ -1,0 +1,33 @@
+{% extends 'admin/base.html' %}
+
+{% block title %}View Logs{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h2>API Logs</h2>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Endpoint</th>
+                    <th>Method</th>
+                    <th>Status Code</th>
+                    <th>Timestamp</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td>{{ log.id }}</td>
+                    <td>{{ log.endpoint }}</td>
+                    <td>{{ log.method }}</td>
+                    <td>{{ log.status_code }}</td>
+                    <td>{{ log.timestamp }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

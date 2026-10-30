@@ -1,0 +1,71 @@
+{% extends 'admin/base.html' %}
+
+{% block title %}Manage {{ provider.name }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>Manage {{ provider.name }} ({{ provider.category }})</h1>
+        <p>Interact with provider endpoints below:</p>
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Endpoints</h5>
+                <form method="POST">
+                    <div class="form-group">
+                        <label for="action">Select Action</label>
+                        <select class="form-control" id="action" name="action" required>
+                            {% for endpoint in endpoints %}
+                            <option value="{{ endpoint }}">{{ endpoint.replace('_', ' ').title() }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" id="username_field">
+                        <label for="username">Username</label>
+                        <input type="text" class="form-control" id="username" name="username" {% if provider.category != 'CATEGORY5' %}value="{{ provider.username }}"{% endif %}>
+                    </div>
+                    <div class="form-group" id="password_field" style="display: none;">
+                        <label for="password">Password</label>
+                        <input type="password" class="form-control" id="password" name="password" {% if provider.category != 'CATEGORY5' %}value="{{ provider.password }}"{% endif %}>
+                    </div>
+                    <div class="form-group" id="new_username_field" style="display: none;">
+                        <label for="new_username">New Username</label>
+                        <input type="text" class="form-control" id="new_username" name="new_username">
+                    </div>
+                    <div class="form-group" id="new_password_field" style="display: none;">
+                        <label for="new_password">New Password</label>
+                        <input type="password" class="form-control" id="new_password" name="new_password">
+                    </div>
+                    <div class="form-group" id="amount_field" style="display: none;">
+                        <label for="amount">Amount</label>
+                        <input type="number" step="0.01" class="form-control" id="amount" name="amount">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Execute</button>
+                </form>
+            </div>
+        </div>
+        {% if response %}
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Response</h5>
+                <pre>{{ response | tojson_pretty }}</pre>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    document.getElementById('action').addEventListener('change', function() {
+        const action = this.value;
+        document.getElementById('username_field').style.display = (action === 'agent_balance') ? 'none' : 'block';
+        document.getElementById('password_field').style.display = (action === 'login') ? 'block' : 'none';
+        document.getElementById('new_username_field').style.display = (action === 'add_user') ? 'block' : 'none';
+        document.getElementById('new_password_field').style.display = (['add_user', 'reset_password'].includes(action)) ? 'block' : 'none';
+        document.getElementById('amount_field').style.display = (['recharge', 'redeem'].includes(action)) ? 'block' : 'none';
+    });
+</script>
+{% endblock %}
+
+{% filter tojson_pretty %}
+{{ response | tojson }}
+{% endfilter %}

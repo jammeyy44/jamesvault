@@ -1,0 +1,47 @@
+{% extends 'admin/base.html' %}
+
+{% block title %}Manage Tokens{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h2>Tokens</h2>
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Account ID</th>
+                    <th>Token</th>
+                    <th>Valid Until</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for token in tokens %}
+                <tr>
+                    <td>{{ token.id }}</td>
+                    <td>{{ token.account_id }}</td>
+                    <td>{{ token.token }}</td>
+                    <td>{{ token.valid_until }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <h3>Create New Token</h3>
+        <form method="POST" action="{{ url_for('tokens.manage_tokens') }}">
+            <div class="form-group">
+                <label for="account_id">Account ID</label>
+                <input type="number" class="form-control" id="account_id" name="account_id" required>
+            </div>
+            <div class="form-group">
+                <label for="token">Token</label>
+                <input type="text" class="form-control" id="token" name="token" required>
+            </div>
+            <div class="form-group">
+                <label for="valid_until">Valid Until</label>
+                <input type="datetime-local" class="form-control" id="valid_until" name="valid_until" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Create Token</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

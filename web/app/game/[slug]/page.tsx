@@ -1,0 +1,676 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import {
+  ArrowLeft, Check, Copy, Eye, EyeOff, FileText, FlaskConical, Gift, Info,
+  KeyRound, Pencil, Play, RefreshCw, Sparkles, Trash2, X
+} from "lucide-react";
+import { api, ApiError, errorMessage, type Game } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
+import { Spinner } from "@/components/ui/bits";
+import { OPEN_WALLET_EVENT, notifyWalletChanged } from "@/components/wallet-panel";
+import { TiredOfLosingCard } from "@/components/free-spin-modal";
+import { TestYourLuckBanner } from "@/components/test-your-luck";
+import { cn } from "@/lib/utils";
+
+type Access = {
+  mode: "sandbox" | "live" | "disabled";
+  game: { slug: string; name: string; category: string; image_url: string | null; download_url?: string | null; status: string };
+  account: { username: string } | null;
+  cash_enabled: boolean;
+  cash: { min: string; max: string; quick: number[]; cashout_min: string | null; cashout_max: string | null };
+  sandbox_notice: string | null;
+  cash_notice: string | null;
+  wallet_funded?: boolean;
+  wallet_balance?: string | null;
+  bonus_enabled?: boolean;
+  bonus_balance?: string | null;
+  bonus_min?: string;
+};
+
+type CashResult = { status: string; sandbox: boolean; amount: string; note: string | null; source?: "wallet" | "bonus" };
+type RedeemPreview = {
+  table: { deposit: string; min: string; max: string }[]; note: string; sandbox: boolean; latest_deposit: string | null;
+  rule: { row: number; deposit: string; min: string; max: string } | null; game_balance: string | null; payout: string | null;
+  voided: string | null; can_redeem: boolean; needs_confirm: boolean; reason: string | null;
+};
+type RedeemResult = { status: string; payout: string; voided: string; note: string | null };
+
+const DEFAULT_COVERS: Record<string, string> = {
+  "royal-vault": "/images/game_royal_vault.jpg",
+  "estar": "/images/game_estar.jpg",
+  "royal-treasure": "/images/game_royal_treasure.jpg",
+  "yolo-lucky-wheel": "/images/game_yolo_wheel.jpg",
+  "vblink": "/images/game_vblink.jpg",
+  "game-vault": "/images/game_royal_vault.jpg",
+};
+
+function getGameCover(game: { slug?: string; name: string; image_url: string | null }) {
+  if (game.image_url) return game.image_url;
+  if (game.slug && DEFAULT_COVERS[game.slug]) return DEFAULT_COVERS[game.slug];
+  const slug = game.name.toLowerCase().replace(/[^a-z0-9]/g, "-");
+  for (const k of Object.keys(DEFAULT_COVERS)) {
+    if (slug.includes(k) || k.includes(slug)) return DEFAULT_COVERS[k];
+  }
+  return DEFAULT_COVERS["royal-vault"];
+}
+
+const num = (v?: string | null) => Number(v ?? 0);
+const money = (v: string | number) => `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: Number.isInteger(Number(v)) ? 0 : 2, maximumFractionDigits: 2 })}`;
+const money2 = (v: string | number) => `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+export default function FullscreenGamePage() {
+  const params = useParams();
+  const router = useRouter();
+  const { player } = useAuth();
+  const slug = (params?.slug as string) || "game-vault";
+
+  const [step, setStep] = useState<"dashboard" | "cash" | "redeem">("dashboard");
+  const [access, setAccess] = useState<Access | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [balance, setBalance] = useState<{ amount: string; at: string } | null>(null);
+  const [balanceError, setBalanceError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [showCredsModal, setShowCredsModal] = useState(false);
+
+  // Fast pre-fill with optimistic game info to open instantly
+  const displayName = slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  const fallbackGame = {
+    slug,
+    name: displayName,
+    category: "Slots, Table Games",
+    image_url: DEFAULT_COVERS[slug] || "/images/game_royal_vault.jpg",
+    status: "active",
+  };
+
+  const loadAccess = useCallback(async () => {
+    try {
+      const res = await api<Access>(`/games/${slug}/access`);
+      setAccess(res);
+      setError(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }, [slug]);
+
+  const refreshBalance = useCallback(async () => {
+    setRefreshing(true);
+    setBalanceError(null);
+    try {
+      const r = await api<{ balance: string; as_of: string }>(`/games/${slug}/balance`);
+      setBalance({ amount: r.balance, at: r.as_of });
+    } catch (e) {
+      setBalance(null);
+      setBalanceError(errorMessage(e));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    loadAccess();
+  }, [loadAccess]);
+
+  useEffect(() => {
+    if (access?.account) {
+      refreshBalance();
+    }
+  }, [access?.account, refreshBalance]);
+
+  const handleGetAccess = async () => {
+    if (!player) {
+      router.push(`/login?return=/game/${slug}`);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await api<Access>(`/games/${slug}/access`, { method: "POST" });
+      setAccess(res);
+      setShowCredsModal(true); // Open Login Details popup immediately
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyUsername = async (u: string) => {
+    try {
+      await navigator.clipboard.writeText(u);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* clipboard */ }
+  };
+
+  const currentGame = access?.game || fallbackGame;
+  const coverUrl = getGameCover(currentGame);
+  const hasAccount = !!access?.account;
+
+  return (
+    <div className="min-h-screen bg-[#070A12] text-white flex flex-col pb-16">
+      
+      {/* Top Header Bar matching user's screenshot */}
+      <div className="sticky top-0 z-30 border-b border-white/10 bg-[#0c101c]/95 backdrop-blur-md px-4 sm:px-8 py-3.5 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="grid h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+          <h1 className="text-sm font-black uppercase tracking-wider text-slate-200">
+            {currentGame.name}
+          </h1>
+        </div>
+
+        <button
+          onClick={() => router.push("/games")}
+          aria-label="Close and return to games"
+          className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition">
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Main Fullscreen Body */}
+      <div className="container-x w-full max-w-6xl py-6 sm:py-8 flex-1">
+        
+        {step === "dashboard" && (
+          <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6 items-start">
+            
+            {/* LEFT COLUMN: Game Profile Card (Screenshots 1, 2, 3) */}
+            <div className="rounded-3xl border border-white/10 bg-[#121829] p-5 sm:p-7 shadow-2xl flex flex-col">
+              
+              {/* Full-bleed game artwork poster */}
+              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-slate-900 border border-white/10 shadow-lg">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={coverUrl}
+                  alt={currentGame.name}
+                  className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
+                />
+              </div>
+
+              {/* Title row with Mint Green circular play button */}
+              <div className="mt-5 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-2xl font-black text-white tracking-tight truncate">
+                    {currentGame.name}
+                  </h2>
+                  <p className="text-xs text-slate-400 font-semibold truncate mt-0.5">
+                    {currentGame.category || "Slots, Table Games"}
+                  </p>
+                </div>
+
+                <button
+                  onClick={hasAccount ? () => setShowCredsModal(true) : handleGetAccess}
+                  aria-label="Play game"
+                  className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black shadow-[0_4px_20px_rgba(52,211,153,0.5)] transition hover:scale-105 active:scale-95">
+                  <Play className="h-5 w-5 fill-current ml-0.5" />
+                </button>
+              </div>
+
+              <hr className="my-5 border-white/10" />
+
+              {/* State A: User does NOT have an account yet (Exact match for Screenshot 3) */}
+              {!hasAccount && (
+                <div className="space-y-4">
+                  {/* Blue info notice box */}
+                  <div className="flex items-center gap-3 rounded-2xl border border-sky-400/25 bg-sky-500/15 p-4 text-xs sm:text-sm text-sky-200">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-sky-400 text-slate-950 text-xs font-black">
+                      i
+                    </span>
+                    <span>
+                      {busy
+                        ? "Your login request is being executed.."
+                        : "You don't have an account, get your access right now"}
+                    </span>
+                  </div>
+
+                  {error && (
+                    <p role="alert" className="rounded-2xl bg-rose-500/15 border border-rose-500/20 p-3 text-xs text-rose-200">
+                      {error}
+                    </p>
+                  )}
+
+                  {/* Sky blue Get access button with animated loading dots */}
+                  <button
+                    onClick={handleGetAccess}
+                    disabled={busy}
+                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-sm transition hover:scale-[1.02] active:scale-95 disabled:opacity-60 shadow-[0_8px_25px_rgba(56,189,248,0.4)]">
+                    {busy ? (
+                      <span className="flex items-center gap-1.5 py-1">
+                        <span className="h-2 w-2 rounded-full bg-slate-950 animate-bounce" />
+                        <span className="h-2 w-2 rounded-full bg-slate-950 animate-bounce [animation-delay:0.15s]" />
+                        <span className="h-2 w-2 rounded-full bg-slate-950 animate-bounce [animation-delay:0.3s]" />
+                      </span>
+                    ) : (
+                      <>
+                        <KeyRound className="h-4 w-4" /> Get access
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* State B: User HAS an account (Exact match for Screenshots 1 & 2) */}
+              {hasAccount && (
+                <div className="space-y-4">
+                  {/* Balance section */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-3xl font-black text-white tabular-nums tracking-tight">
+                        {balance ? money2(balance.amount) : "$0.00"}
+                      </p>
+                      <p className="text-xs text-slate-400 font-semibold mt-0.5">Balance</p>
+                    </div>
+
+                    <button
+                      onClick={refreshBalance}
+                      aria-label="Refresh balance"
+                      className="flex items-center gap-2 text-right text-xs text-slate-400 hover:text-white transition group">
+                      <RefreshCw className={cn("h-4 w-4 text-slate-300 transition-transform", refreshing && "animate-spin")} />
+                      <div>
+                        <p className="text-[10px] text-slate-400 font-medium">Last update</p>
+                        <p className="font-bold text-slate-300 text-[11px]">
+                          {balance ? new Date(balance.at).toLocaleDateString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "27 Oct 10:46 AM"}
+                        </p>
+                      </div>
+                    </button>
+                  </div>
+
+                  {balanceError && <p className="text-xs text-amber-200">{balanceError}</p>}
+
+                  {/* Add Cash & Cash Out buttons row */}
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <button
+                      onClick={() => setStep("cash")}
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-xs sm:text-sm shadow-sm transition hover:scale-[1.02] active:scale-95">
+                      <span className="grid h-5 w-5 place-items-center rounded-full bg-slate-950/15 text-slate-950 text-[10px] font-black">
+                        $
+                      </span>
+                      Add Cash
+                    </button>
+
+                    <button
+                      onClick={() => setStep("redeem")}
+                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#182035] hover:bg-[#1f2942] text-white font-bold text-xs sm:text-sm transition hover:scale-[1.02] active:scale-95">
+                      <span className="grid h-5 w-5 place-items-center rounded-full bg-white/10 text-white text-[10px] font-bold">
+                        $
+                      </span>
+                      Cash Out
+                    </button>
+                  </div>
+
+                  {/* Copyable Account ID box */}
+                  <div
+                    onClick={() => setShowCredsModal(true)}
+                    className="group cursor-pointer rounded-xl border border-white/10 bg-[#182035] hover:bg-[#1f2942] px-4 py-3 flex items-center justify-between transition">
+                    <span className="font-mono text-sm font-bold text-slate-200">
+                      {access?.account?.username}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        access?.account && copyUsername(access.account.username);
+                      }}
+                      className="text-slate-400 hover:text-white transition p-1">
+                      {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => setShowCredsModal(true)}
+                    className="w-full text-center text-xs font-bold text-sky-400 hover:text-sky-300 hover:underline">
+                    View login details &amp; password →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* RIGHT COLUMN: Free Spin Card + Promo Banner + Transactions Area */}
+            <div className="flex flex-col gap-5">
+              
+              {/* Tired of losing? Try Free Spin card */}
+              <TiredOfLosingCard />
+
+              {/* Test your luck promo banner: Loss Streak Diamond Shield */}
+              <TestYourLuckBanner />
+
+              {/* Transactions Container */}
+              <div className="min-h-[360px] rounded-3xl border border-white/10 bg-[#121829] p-8 flex flex-col items-center justify-center text-center shadow-xl">
+                <div className="grid h-16 w-16 place-items-center rounded-3xl bg-white/5 border border-white/10 text-slate-400 mb-3">
+                  <FileText className="h-8 w-8 stroke-[1.5]" />
+                </div>
+                <p className="text-base font-bold text-slate-300">
+                  Your transactions will be displayed here
+                </p>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm">
+                  Recent deposits, redeems, and play sessions appear here automatically.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Add Cash */}
+        {step === "cash" && access && (
+          <div className="max-w-xl mx-auto rounded-3xl border border-white/10 bg-[#121829] p-6 sm:p-8 shadow-2xl">
+            <FullscreenCash state={access} onBack={() => setStep("dashboard")} onDone={() => { loadAccess(); refreshBalance(); }} />
+          </div>
+        )}
+
+        {/* Step: Redeem / Cash Out */}
+        {step === "redeem" && access && (
+          <div className="max-w-xl mx-auto rounded-3xl border border-white/10 bg-[#121829] p-6 sm:p-8 shadow-2xl">
+            <FullscreenRedeem state={access} onBack={() => setStep("dashboard")} onDone={() => { loadAccess(); refreshBalance(); }} />
+          </div>
+        )}
+      </div>
+
+      {/* Login Details Modal Dialog (Screenshot 4) */}
+      {showCredsModal && (
+        <FullscreenLoginDetailsModal
+          slug={slug}
+          game={currentGame}
+          onCash={() => { setShowCredsModal(false); setStep("cash"); }}
+          onClose={() => setShowCredsModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Login Details Modal popup matching Screenshot 4 */
+function FullscreenLoginDetailsModal({
+  slug, game, onCash, onClose
+}: {
+  slug: string; game: { name: string; image_url: string | null }; onCash: () => void; onClose: () => void;
+}) {
+  const [creds, setCreds] = useState<{ username: string; password: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showPass, setShowPass] = useState(false);
+  const [copiedUser, setCopiedUser] = useState(false);
+  const [copiedPass, setCopiedPass] = useState(false);
+
+  useEffect(() => {
+    api<{ username: string; password: string }>(`/games/${slug}/access/credentials`)
+      .then((c) => { setCreds(c); setError(null); })
+      .catch((e) => setError(errorMessage(e)));
+  }, [slug]);
+
+  const copy = async (txt: string, isUser: boolean) => {
+    try {
+      await navigator.clipboard.writeText(txt);
+      if (isUser) { setCopiedUser(true); setTimeout(() => setCopiedUser(false), 2000); }
+      else { setCopiedPass(true); setTimeout(() => setCopiedPass(false), 2000); }
+    } catch { /* clipboard */ }
+  };
+
+  const coverUrl = getGameCover(game);
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      
+      <div className="w-full max-w-sm rounded-3xl border border-white/15 bg-[#131927] p-6 text-white shadow-2xl relative animate-in zoom-in-95 duration-200">
+        
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="text-xl font-black text-white tracking-tight">Login details</h3>
+            <p className="text-xs text-slate-400 font-semibold mt-0.5">Your login is ready to play!</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="rounded-xl p-1 text-slate-400 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Game icon & title chip */}
+        <div className="mt-4 flex items-center gap-3 rounded-2xl bg-white/5 border border-white/10 p-3">
+          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={coverUrl} alt={game.name} className="h-full w-full object-cover" />
+          </div>
+          <p className="text-base font-extrabold text-white truncate">{game.name}</p>
+        </div>
+
+        {/* Section Divider */}
+        <div className="my-4 flex items-center gap-2">
+          <div className="h-px flex-1 bg-white/10" />
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">LOGIN DETAILS</span>
+          <div className="h-px flex-1 bg-white/10" />
+        </div>
+
+        {error && <p className="mb-3 rounded-xl bg-rose-500/15 p-3 text-xs text-rose-200">{error}</p>}
+
+        {!creds && !error ? (
+          <div className="grid h-28 place-items-center"><Spinner className="h-6 w-6 text-sky-400" /></div>
+        ) : creds && (
+          <div className="space-y-3">
+            {/* Username field */}
+            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#182035] px-4 py-3">
+              <span className="font-mono text-sm font-bold text-white truncate">
+                {creds.username}
+              </span>
+              <button
+                type="button"
+                onClick={() => copy(creds.username, true)}
+                className="text-slate-400 hover:text-white transition p-1">
+                {copiedUser ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+              </button>
+            </div>
+
+            {/* Password field */}
+            <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#182035] px-4 py-3">
+              <span className="font-mono text-sm font-bold text-white truncate">
+                {showPass ? creds.password : "••••••"}
+              </span>
+              <div className="flex items-center gap-2 text-slate-400">
+                <button
+                  type="button"
+                  onClick={() => setShowPass(!showPass)}
+                  className="hover:text-white transition p-1"
+                  aria-label={showPass ? "Hide password" : "Show password"}>
+                  {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => copy(creds.password, false)}
+                  className="hover:text-white transition p-1"
+                  aria-label="Copy password">
+                  {copiedPass ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Action buttons */}
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <button
+            onClick={onCash}
+            className="inline-flex h-11 items-center justify-center rounded-xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-sm transition active:scale-95">
+            Add Cash
+          </button>
+          <button
+            onClick={onClose}
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-white/10 bg-[#182035] hover:bg-[#1f2942] text-white font-bold text-sm transition">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Add Cash Screen embedded cleanly in the page */
+function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () => void; onDone: () => void }) {
+  const { min, max, quick } = state.cash;
+  const wallet = num(state.wallet_balance), bonus = num(state.bonus_balance);
+  const bonusUsable = !!state.bonus_enabled && bonus > 0;
+  const lowWallet = !!state.wallet_funded && wallet < 1 && bonusUsable;
+  const [source, setSource] = useState<"wallet" | "bonus">(lowWallet ? "bonus" : "wallet");
+  const [amount, setAmount] = useState(lowWallet ? Math.min(10, bonus) : (quick[1] ?? 10));
+  const [editing, setEditing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<CashResult | null>(null);
+  const attempt = useRef<{ k: string; key: string } | null>(null);
+
+  const cap = source === "bonus" ? Math.min(Number(max), bonus) : Number(max);
+  const clamp = (n: number) => Math.max(0, Math.min(cap, Math.round(n * 100) / 100));
+  const valid = source === "bonus" ? amount > 0 && amount <= cap && (amount >= 1 || amount === bonus) : amount >= Number(min) && amount <= Number(max);
+
+  const submit = async () => {
+    setBusy(true); setError(null); setDone(null);
+    const k = `${source}:${amount}`;
+    if (!attempt.current || attempt.current.k !== k) attempt.current = { k, key: crypto.randomUUID() };
+    try {
+      const r = await api<CashResult>(`/games/${state.game.slug}/cash`, { method: "POST", body: { amount: amount.toFixed(2), source, idempotency_key: attempt.current.key } });
+      setDone(r); attempt.current = null; onDone(); notifyWalletChanged();
+    } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between pb-4 border-b border-white/10">
+        <h2 className="text-xl font-black text-white">Add Cash to {state.game.name}</h2>
+        <button onClick={onBack} className="text-xs font-bold text-sky-400 hover:underline">← Back to Game</button>
+      </div>
+
+      {(state.wallet_funded || bonusUsable) && (
+        <div role="group" aria-label="Pay with" className="mt-5 grid grid-cols-2 gap-1 rounded-2xl bg-white/5 border border-white/10 p-1">
+          {([["wallet", "Wallet", state.wallet_funded ? money2(wallet) : null], ["bonus", "Bonus", money2(bonus)]] as const).map(([key, label, bal]) => (
+            <button key={key} onClick={() => setSource(key)} aria-pressed={source === key} disabled={key === "bonus" && !bonusUsable}
+              className={cn("rounded-xl px-3 py-2 text-xs sm:text-sm font-bold transition disabled:opacity-40", source === key ? (key === "bonus" ? "bg-[#ffd966] text-slate-950 font-black" : "bg-sky-400 text-slate-950 font-black") : "text-slate-300 hover:bg-white/10")}>
+              {label}{bal && <span className="ml-1.5 font-extrabold">{bal}</span>}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <p className="mt-5 text-center text-xs font-semibold text-slate-400">Amount{source === "bonus" ? " from bonus balance" : ""}</p>
+      <div className="mt-2 flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 px-5 py-4">
+        <button onClick={() => setEditing((v) => !v)} aria-label="Edit amount" className="text-sky-400"><Pencil className="h-4 w-4" /></button>
+        {editing ? (
+          <input autoFocus inputMode="decimal" aria-label="Amount in dollars" value={amount}
+            onChange={(e) => setAmount(clamp(Number(e.target.value.replace(/[^0-9.]/g, "")) || 0))}
+            onBlur={() => setEditing(false)} className="w-32 bg-transparent text-center text-4xl font-black text-white outline-none" />
+        ) : <p className="text-4xl font-black text-white tabular-nums">{money(amount)}</p>}
+        <button onClick={() => setAmount(0)} aria-label="Clear amount" className="text-slate-400 hover:text-white"><X className="h-5 w-5" /></button>
+      </div>
+
+      <div className="mt-3 grid grid-cols-5 gap-1.5">
+        {quick.map((q) => <button key={q} onClick={() => setAmount((a) => clamp(a + q))} className="rounded-xl bg-white/5 border border-white/10 py-3 text-xs font-black text-sky-400 hover:bg-white/10">+{q}</button>)}
+        <button onClick={() => setAmount((a) => clamp(a * 2))} className="rounded-xl bg-white/5 border border-white/10 py-3 text-xs font-black text-sky-400 hover:bg-white/10">X2</button>
+        <button onClick={() => setAmount(0)} aria-label="Reset amount" className="grid place-items-center rounded-xl bg-rose-500/15 border border-rose-500/20 text-rose-300 hover:bg-rose-500/25"><Trash2 className="h-4 w-4" /></button>
+      </div>
+
+      <dl className="mt-5 space-y-2 rounded-2xl bg-white/5 border border-white/10 p-4 text-xs text-slate-300">
+        {state.wallet_funded && <div className="flex justify-between"><dt className="text-slate-400">Wallet balance</dt><dd className="font-bold text-white">{state.wallet_balance !== null && state.wallet_balance !== undefined ? money2(state.wallet_balance) : "—"}</dd></div>}
+        {state.bonus_enabled && <div className="flex justify-between"><dt className="text-slate-400">Bonus balance</dt><dd className="font-bold text-[#ffd966]">{money2(bonus)}</dd></div>}
+        <div className="flex justify-between"><dt className="text-slate-400">{source === "bonus" ? "From bonus" : "Add cash range"}</dt><dd className="font-bold text-white">{source === "bonus" ? `min ${money(state.bonus_min ?? "1")} or the whole balance` : `${money(min)} – ${money(max)}`}</dd></div>
+      </dl>
+
+      {error && <p role="alert" className="mt-3 rounded-2xl bg-rose-500/15 border border-rose-500/20 p-3 text-xs text-rose-200">{error}</p>}
+      {done && (
+        <p role="status" className="mt-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/20 p-3 text-xs text-emerald-200">
+          {done.status === "completed" ? `${money2(done.amount)} added to game.` : `Request for ${money(done.amount)} received.`}
+        </p>
+      )}
+
+      <div className="mt-6 flex gap-3">
+        <button className="flex-1 h-12 rounded-2xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-sm transition active:scale-95 shadow-md disabled:opacity-50"
+          onClick={submit} disabled={busy || !valid}>
+          {busy ? <Spinner /> : null} Confirm Add Cash
+        </button>
+        <button className="h-12 px-6 rounded-2xl border border-white/10 bg-[#182035] hover:bg-[#1f2942] text-white font-bold text-sm transition"
+          onClick={onBack}>
+          Back
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Cash Out / Redeem Screen embedded cleanly in the page */
+function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: () => void; onDone: () => void }) {
+  const [p, setP] = useState<RedeemPreview | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<RedeemResult | null>(null);
+  const key = useRef<string | null>(null);
+
+  const load = useCallback(async () => {
+    try { setP(await api<RedeemPreview>(`/games/${state.game.slug}/redeem`)); setError(null); } catch (e) { setError(errorMessage(e)); }
+  }, [state.game.slug]);
+  useEffect(() => { load(); }, [load]);
+
+  const submit = async () => {
+    setBusy(true); setError(null); setResult(null);
+    key.current = key.current ?? crypto.randomUUID();
+    try {
+      const r = await api<RedeemResult>(`/games/${state.game.slug}/redeem`, { method: "POST", body: { idempotency_key: key.current, confirm_void: confirm } });
+      setResult(r); key.current = null; setConfirm(false); await load(); onDone(); notifyWalletChanged();
+    } catch (e) { setError(errorMessage(e)); } finally { setBusy(false); }
+  };
+
+  return (
+    <div>
+      <div className="flex items-center justify-between pb-4 border-b border-white/10">
+        <h2 className="text-xl font-black text-white">Cash Out from {state.game.name}</h2>
+        <button onClick={onBack} className="text-xs font-bold text-sky-400 hover:underline">← Back to Game</button>
+      </div>
+
+      {!p && !error && <div className="grid h-32 place-items-center"><Spinner className="h-6 w-6 text-sky-400" /></div>}
+      {p && (
+        <>
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-4"><p className="text-xs text-slate-400">Game balance</p><p className="mt-1 text-2xl font-black text-white">{p.game_balance !== null ? money2(p.game_balance) : "—"}</p></div>
+            <div className="rounded-2xl bg-white/5 border border-white/10 p-4"><p className="text-xs text-slate-400">Latest deposit</p><p className="mt-1 text-2xl font-black text-white">{p.latest_deposit ? money2(p.latest_deposit) : "—"}</p></div>
+          </div>
+          {p.rule && (
+            <p className="mt-3 rounded-2xl bg-white/5 border border-white/10 p-3 text-xs text-slate-300">
+              Your latest deposit sets your limits: redeem <b>at least {money2(p.rule.min)}</b> and <b>at most {money2(p.rule.max)}</b>.
+            </p>
+          )}
+
+          {p.can_redeem ? (
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="flex justify-between text-xs"><span className="text-slate-400">Added to your wallet</span><span className="text-lg font-black text-emerald-300">{money2(p.payout ?? 0)}</span></div>
+              {p.needs_confirm && (
+                <>
+                  <div className="mt-2 flex justify-between text-xs"><span className="text-slate-400">Voided (above max)</span><span className="text-lg font-black text-rose-300">{money2(p.voided ?? 0)}</span></div>
+                  <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl bg-rose-500/10 p-2.5 text-xs text-rose-200">
+                    <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} className="mt-0.5 h-4 w-4 accent-rose-400" />
+                    <span>I understand {money2(p.voided ?? 0)} above my max will be voided and cannot be recovered.</span>
+                  </label>
+                </>
+              )}
+            </div>
+          ) : p.reason && <p className="mt-3 rounded-2xl bg-amber-300/10 border border-amber-300/20 p-3 text-xs text-amber-100">{p.reason}</p>}
+        </>
+      )}
+
+      {error && <p role="alert" className="mt-3 rounded-2xl bg-rose-500/15 p-3 text-xs text-rose-200">{error}</p>}
+      {result && (
+        <p role="status" className={cn("mt-3 rounded-2xl p-3 text-xs", result.status === "completed" ? "bg-emerald-500/15 text-emerald-200" : "bg-amber-300/10 text-amber-100")}>
+          {result.status === "completed" ? `${money2(result.payout)} was added to your wallet.` : result.note ?? "Could not complete redeem."}
+        </p>
+      )}
+
+      <div className="mt-6 flex gap-3">
+        <button className="flex-1 h-12 rounded-2xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-sm transition active:scale-95 shadow-md disabled:opacity-50"
+          onClick={submit} disabled={busy || !p?.can_redeem || (p.needs_confirm && !confirm)}>
+          {busy ? <Spinner /> : null} Confirm Cash Out
+        </button>
+        <button className="h-12 px-6 rounded-2xl border border-white/10 bg-[#182035] hover:bg-[#1f2942] text-white font-bold text-sm transition"
+          onClick={onBack}>
+          Back
+        </button>
+      </div>
+    </div>
+  );
+}

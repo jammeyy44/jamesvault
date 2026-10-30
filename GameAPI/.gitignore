@@ -1,0 +1,23 @@
+# Ignore virtual environment
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+
+# Ignore environment variables
+.env
+
+# Ignore IDE files
+.vscode/
+
+# Ignore migrations (if not using Alembic)
+# migrations/
+
+# Ignore configuration file (if it contains secrets)
+# config.py  # Uncomment if config.py contains sensitive data
+
+# uploaded game thumbnails
+uploads/

@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { scroll-behavior: smooth; }
+  body {
+    @apply bg-page text-white antialiased font-sans;
+    background-image:
+      radial-gradient(55rem 30rem at 85% -10%, rgba(124, 58, 237, 0.16), transparent 60%),
+      radial-gradient(50rem 28rem at -10% 15%, rgba(56, 189, 248, 0.12), transparent 60%),
+      radial-gradient(40rem 40rem at 50% 80%, rgba(79, 70, 229, 0.08), transparent 70%);
+    background-attachment: fixed;
+  }
+  :focus-visible { @apply outline-none ring-2 ring-primary ring-offset-2 ring-offset-page; }
+  h1, h2, h3 { @apply tracking-tight text-white; }
+}
+
+@layer components {
+  .container-x { @apply mx-auto w-full max-w-7xl px-3 sm:px-6 lg:px-8; }
+  .gradient-text {
+    @apply bg-brand-text bg-clip-text text-transparent;
+    -webkit-background-clip: text;
+  }
+  .surface { @apply rounded-xl2 border border-white/10 bg-[#131927]/90 text-white shadow-card backdrop-blur-md; }
+  .field {
+    @apply w-full rounded-xl border border-white/10 bg-[#141A29] px-4 py-2.5 text-sm text-white placeholder:text-muted/70
+      transition focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20;
+  }
+  .label { @apply mb-1.5 block text-sm font-medium text-white/90; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
