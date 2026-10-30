@@ -8,6 +8,22 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+def parse_redis_url(raw):
+    """Turn whatever was put in CACHE_REDIS_URL into a clean redis:// or rediss:// address, or None when there is none.
+
+    Forgiving on purpose: a bad cache setting must never stop the whole API from starting. A pasted
+    "redis-cli --tls -u redis://user:pass@host:6379" is understood (and --tls means rediss://)."""
+    import re
+    raw = (raw or "").strip()
+    match = re.search(r"rediss?://[^\s\"']+", raw) or re.search(r"unix://[^\s\"']+", raw)
+    if not match:
+        return None
+    url = match.group(0)
+    if "--tls" in raw and url.startswith("redis://"):
+        url = "rediss://" + url[len("redis://"):]
+    return url
+
+
 def _flag(name, default=False):
     return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
 
@@ -123,11 +139,16 @@ class Config:
 
     # Caching mechanism
     # Caching configuration with Redis
-    CACHE_TYPE = 'redis'
+    _redis_raw = os.getenv('CACHE_REDIS_URL', '')
+    _redis_url = parse_redis_url(_redis_raw) if _redis_raw.strip() else \
+        f'redis://{os.getenv("REDIS_HOST", "localhost")}:{os.getenv("REDIS_PORT", "6379")}/{os.getenv("REDIS_DB", "0")}'
+    if _redis_url is None:  # CACHE_REDIS_URL is set but unusable: run with an in-process cache instead of crashing
+        print("WARNING: CACHE_REDIS_URL is not a valid redis:// or rediss:// address; using the in-process cache instead.")
+    CACHE_TYPE = 'redis' if _redis_url else 'SimpleCache'
     CACHE_REDIS_HOST = os.getenv('REDIS_HOST', 'localhost')
     CACHE_REDIS_PORT = int(os.getenv('REDIS_PORT', 6379))
     CACHE_REDIS_DB = int(os.getenv('REDIS_DB', 0))
-    CACHE_REDIS_URL = os.getenv('CACHE_REDIS_URL', f'redis://{os.getenv("REDIS_HOST", "localhost")}:{os.getenv("REDIS_PORT", "6379")}/{os.getenv("REDIS_DB", "0")}')
+    CACHE_REDIS_URL = _redis_url or ''
     CACHE_DEFAULT_TIMEOUT = int(os.getenv('CACHE_DEFAULT_TIMEOUT', 300))  # 5 minutes default
 
     # TwoCaptcha Settings
