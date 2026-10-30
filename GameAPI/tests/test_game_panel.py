@@ -2,6 +2,7 @@
 import base64
 import io
 import os
+import re
 
 import pytest
 
@@ -136,7 +137,7 @@ def test_no_captcha_key_is_hard_coded_in_the_adapters():
     for name in os.listdir(base):
         if name.endswith(".py"):
             text = open(os.path.join(base, name), encoding="utf-8").read()
-            assert "cdfa431906375d3df98956d07371248a" not in text, name
+            assert not re.search(r"['\"][0-9a-f]{32}['\"]", text), f"{name} contains a hard-coded 32-character key"
 
 
 # ------------------------------------------------------------------ reset password
