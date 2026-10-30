@@ -720,11 +720,22 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
       </dl>
 
       {error && <p role="alert" className="mt-3 rounded-2xl bg-rose-500/15 border border-rose-500/20 p-3 text-xs text-rose-200">{error}</p>}
-      {done && (
-        <p role="status" className="mt-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/20 p-3 text-xs text-emerald-200">
-          {done.status === "completed" ? `${money2(done.amount)} added to game.` : `Request for ${money(done.amount)} received.`}
-        </p>
-      )}
+      {done && (() => {
+        const from = done.source === "bonus" ? "bonus balance" : "wallet";
+        const ok = done.status === "completed";
+        const held = done.status === "needs_review";
+        const failed = done.status === "failed";
+        const text = ok ? `${money2(done.amount)} added to the game${done.source === "bonus" ? " from your bonus balance" : ""}.`
+          : failed ? `The game could not add the cash, so nothing was charged: your ${from} is unchanged.${done.note ? ` (${done.note})` : ""}`
+          : held ? `Your funds are held while we confirm the credit with the game. Nothing is lost.`
+          : `Request for ${money(done.amount)} received. It will be credited once our team confirms your payment.`;
+        return (
+          <p role={failed ? "alert" : "status"} data-testid="cash-result" data-status={done.status}
+            className={cn("mt-3 rounded-2xl border p-3 text-xs", ok ? "bg-emerald-500/15 border-emerald-500/20 text-emerald-200" : failed ? "bg-rose-500/15 border-rose-500/25 text-rose-200" : "bg-amber-300/10 border-amber-300/25 text-amber-100")}>
+            {text}
+          </p>
+        );
+      })()}
 
       <div className="mt-6 flex gap-3">
         <button className="flex-1 h-12 rounded-2xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-sm transition active:scale-95 shadow-md disabled:opacity-50"
