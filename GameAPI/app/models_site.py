@@ -343,6 +343,7 @@ class GameAccount(db.Model):
     player_id = db.Column(db.Integer, db.ForeignKey('players.id'), nullable=False, index=True)
     game_id = db.Column(db.Integer, db.ForeignKey('catalog_games.id'), nullable=False)
     provider_username = db.Column(db.String(60), nullable=False)
+    provider_user_id = db.Column(db.String(40), nullable=True)  # the provider's own player id (agent API panels), when it told us
     password_enc = db.Column(db.Text, nullable=False)
     status = db.Column(db.String(20), nullable=False, default='pending')  # pending | active
     sandbox = db.Column(db.Boolean, nullable=False, default=False)

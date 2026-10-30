@@ -139,7 +139,7 @@ def get_access(slug):
         db.session.commit()
 
     try:
-        gateway.create_account(game, username, password)
+        created = gateway.create_account(game, username, password)
     except GatewayError as e:
         undo()
         return json_error(str(e), 502, code="provider_error")
@@ -147,6 +147,13 @@ def get_access(slug):
         logger.exception("create_account failed")
         undo()
         return json_error("The game provider could not create your access. Please try again later.", 502, code="provider_error")
+    if isinstance(created, dict):  # use the name and player id the provider actually created
+        real_name = str(created.get("username") or "")[:60]
+        if real_name and real_name != acct.provider_username:
+            logger.info("provider renamed the login %s -> %s", acct.provider_username, real_name)
+            acct.provider_username = real_name
+        if created.get("user_id"):
+            acct.provider_user_id = str(created["user_id"])[:40]
     acct.status = 'active'
     audit("game_account.create", target=slug, detail={"sandbox": acct.sandbox})
     db.session.commit()

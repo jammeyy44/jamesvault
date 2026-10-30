@@ -240,6 +240,43 @@ def test_if_the_balance_cannot_be_verified_nothing_is_removed(api, make_player, 
     assert r.status_code == 502 and GameAccount.query.one().status == "active"
 
 
+class RenamingGateway(SandboxGateway):
+    """The provider creates the login under its own name and player id (it may add a prefix)."""
+
+    def create_account(self, game, username, password):
+        return {"username": "pfx_" + username, "user_id": "88001"}
+
+
+def test_the_login_shown_is_the_one_the_provider_really_created(api, make_player, game, sandbox, monkeypatch):
+    make_player(api)
+    monkeypatch.setattr("app.routes.site.accounts.get_gateway", lambda: RenamingGateway())
+    r = api.post('/api/v1/games/game-vault/access')
+    assert r.status_code == 201 and r.get_json()["account"]["username"].startswith("pfx_")
+    acct = GameAccount.query.one()
+    assert acct.provider_username.startswith("pfx_") and acct.provider_user_id == "88001"
+    assert api.get('/api/v1/games/game-vault/access/credentials').get_json()["username"] == acct.provider_username
+
+
+def test_creating_a_login_never_pretends_when_the_provider_fails(app, monkeypatch):
+    """No fake success: with no CAPTCHA key (or any provider failure) the error reaches the caller."""
+    class Game:
+        provider = None
+    gw = ProviderGateway()
+    monkeypatch.setitem(app.config, "CAPTCHA_API_KEY", "")
+    with pytest.raises(GatewayError):
+        gw.create_account(Game(), "ab123456", "pw1234567")
+
+
+def test_provider_failure_creates_no_login(api, make_player, game, sandbox, monkeypatch):
+    class Failing(SandboxGateway):
+        def create_account(self, game, username, password):
+            raise GatewayError("The game provider could not complete that request. Please try again later.")
+    make_player(api)
+    monkeypatch.setattr("app.routes.site.accounts.get_gateway", lambda: Failing())
+    assert api.post('/api/v1/games/game-vault/access').status_code == 502
+    assert GameAccount.query.count() == 0
+
+
 class NotFoundBalance(SandboxGateway):
     reason = "User not found"
 

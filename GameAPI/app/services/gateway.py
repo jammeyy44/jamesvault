@@ -156,34 +156,34 @@ class ProviderGateway:
             self._log(provider, action, False, f"{type(e).__name__}: {e}", started)
             raise AmbiguousOutcome(str(e)) from e
 
+    @staticmethod
+    def _known(s, account):
+        """Hand the saved provider player id to adapters that can use it (skips a lookup that may fail)."""
+        if getattr(account, "provider_user_id", None):
+            s.known_ids = {account.provider_username: account.provider_user_id}
+        return s
+
     def create_account(self, game, username, password):
-        api_key = (current_app.config.get("CAPTCHA_API_KEY") or "").strip()
-        from app.services.base_service import CAPTCHA_PLACEHOLDERS
-        if not api_key or api_key in CAPTCHA_PLACEHOLDERS:
-            return {"username": username}
-        try:
-            return self._call(game.provider, "add_user", lambda s: s.add_user(username, password))
-        except Exception as e:
-            logger.warning("Provider add_user fallback (%s) for %s", e, username)
-            return {"username": username}
+        # The login only exists once the provider has really created it. Any failure is raised to the caller, never hidden.
+        return self._call(game.provider, "add_user", lambda s: s.add_user(username, password))
 
     def get_balance(self, account):
-        result = self._call(account.game.provider, "get_balances", lambda s: s.get_balances(account.provider_username))
+        result = self._call(account.game.provider, "get_balances", lambda s: self._known(s, account).get_balances(account.provider_username))
         try:
             return Decimal(str(result.get("balance")).replace("$", "").replace(",", "").strip())
         except (InvalidOperation, TypeError):
             raise GatewayError("The game provider returned an unreadable balance.")
 
     def recharge(self, account, amount):
-        self._call(account.game.provider, "recharge", lambda s: s.recharge(account.provider_username, float(amount)))
+        self._call(account.game.provider, "recharge", lambda s: self._known(s, account).recharge(account.provider_username, float(amount)))
 
     def reset_password(self, account, new_password):
         """Set a new password on the player's login at the provider."""
-        self._call(account.game.provider, "change_password", lambda s: s.change_password(account.provider_username, new_password))
+        self._call(account.game.provider, "change_password", lambda s: self._known(s, account).change_password(account.provider_username, new_password))
 
     def redeem(self, account, amount):
         """Take `amount` (the player's whole balance) out of the game account."""
-        self._call(account.game.provider, "redeem", lambda s: s.redeem(account.provider_username, float(amount)))
+        self._call(account.game.provider, "redeem", lambda s: self._known(s, account).redeem(account.provider_username, float(amount)))
 
     def test_connection(self, provider):
         """Admin check: can we log in, and what is the agent balance (the funds available to recharge players)."""

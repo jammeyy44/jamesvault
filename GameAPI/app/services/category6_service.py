@@ -84,7 +84,11 @@ class Category6Service(BaseGameService):
             return {"message": "Login failed", "error": result["error"]}
         return {"message": "Login successful"}
 
+    known_ids = None  # {account name: provider player id} when the caller already has it (saved at creation)
+
     def _user_id(self, username):
+        if self.known_ids and self.known_ids.get(username):
+            return str(self.known_ids[username]), None
         result = self._post("getUserID", {"account_name": username})
         if "error" in result:
             return None, result["error"]
@@ -95,7 +99,10 @@ class Category6Service(BaseGameService):
         result = self._post("addUser", {"account": username, "login_pwd": password})
         if "error" in result:
             return {"message": "Failed to add user", "error": result["error"]}
-        return {"message": "User created", "username": username}
+        data = result["data"] or {}
+        # The panel says which name and player id it actually created: those are what the player must log in with.
+        return {"message": "User created", "username": str(data.get("account_name") or username),
+                "user_id": str(data["user_id"]) if data.get("user_id") else None}
 
     def get_balances(self, username):
         uid, err = self._user_id(username)
