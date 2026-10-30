@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Check, LogOut, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+  Activity, Banknote, BadgeCheck, Check, CreditCard, Disc3, Gamepad2, Gift, KeyRound, LayoutDashboard, LifeBuoy, Link2, LogOut, Pencil,
+  Percent, Plus, ScrollText, Server, ShieldCheck, Sparkles, Ticket, Trash2, UserPlus, Users, Wallet, X,
+} from "lucide-react";
 import { Badge, EmptyState, ErrorState, Notice, Skeleton } from "@/components/ui/bits";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
@@ -77,6 +80,20 @@ const ROLE_TABS: Record<Exclude<Role, "player">, string[]> = {
 
 const labelFor = (k: string) => RESOURCES[k]?.label ?? QUEUES[k]?.label ?? ({ tickets: "Support tickets", coupons: "Coupons", tokens: "API tokens", providers: "Providers", overview: "Overview", unmatched: "Unmatched payments", "payment-methods": "Payment methods" } as Record<string, string>)[k] ?? k;
 
+const NAV_GROUPS: [string, string[]][] = [
+  ["Dashboard", ["overview"]],
+  ["Catalog & content", ["providers", "games", "promotions", "coupons", "wheel-prizes"]],
+  ["Queues", ["claims", "spins", "referrals"]],
+  ["Money", ["cash-requests", "withdrawals", "payments", "unmatched", "payment-methods"]],
+  ["People", ["players", "tickets"]],
+  ["System", ["tokens", "provider-logs", "audit"]],
+];
+const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  overview: LayoutDashboard, providers: Server, games: Gamepad2, promotions: Sparkles, coupons: Ticket, "wheel-prizes": Disc3,
+  claims: BadgeCheck, spins: Gift, referrals: UserPlus, "cash-requests": Wallet, withdrawals: Banknote, payments: CreditCard,
+  unmatched: Link2, "payment-methods": Percent, players: Users, tickets: LifeBuoy, tokens: KeyRound, "provider-logs": Activity, audit: ScrollText,
+};
+
 // ---------------------------------------------------------------- page
 // One site, one login: staff sign in at /login like everyone else and see this panel because their account has a role.
 export default function AdminPage() {
@@ -100,16 +117,44 @@ export default function AdminPage() {
 
   return (
     <div className="container-x py-8">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3"><h1 className="text-2xl font-extrabold">Admin panel</h1><Badge>{role}</Badge></div>
-        <Button variant="secondary" size="sm" onClick={async () => { await logout(); router.push("/"); }}><LogOut className="h-4 w-4" />Sign out</Button>
+      <div className="relative mb-6 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-r from-[#1b1740] via-[#121a36] to-[#0e1a2e] p-5 sm:p-6 shadow-card">
+        <div className="pointer-events-none absolute -right-10 -top-16 h-52 w-52 rounded-full bg-purple-500/20 blur-3xl" />
+        <div className="relative flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-[#8B5CF6] to-[#4F46E5] shadow-lift"><ShieldCheck className="h-6 w-6 text-white" /></span>
+            <div>
+              <h1 className="text-2xl font-black tracking-tight">Admin panel</h1>
+              <p className="text-sm text-slate-400">Signed in as <b className="text-slate-200">{player.username}</b> <span className="ml-1 rounded-full border border-purple-400/30 bg-purple-400/10 px-2.5 py-0.5 text-xs font-bold capitalize text-purple-300">{role}</span></p>
+            </div>
+          </div>
+          <Button variant="secondary" size="sm" onClick={async () => { await logout(); router.push("/"); }}><LogOut className="h-4 w-4" />Sign out</Button>
+        </div>
       </div>
-      <div className="grid gap-6 lg:grid-cols-[13rem_1fr]">
-        <nav className="flex gap-1 overflow-x-auto lg:flex-col" aria-label="Admin sections">
-          {ROLE_TABS[role].map((k) => (
-            <button key={k} onClick={() => setTab(k)} aria-current={tab === k}
-              className={cn("shrink-0 rounded-xl px-4 py-2.5 text-left text-sm font-semibold", tab === k ? "bg-brand-gradient text-white" : "hover:bg-white")}>{labelFor(k)}</button>
-          ))}
+      <div className="grid gap-6 lg:grid-cols-[15rem_1fr]">
+        <nav className="lg:sticky lg:top-24 lg:self-start" aria-label="Admin sections">
+          <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:gap-4 lg:overflow-visible lg:rounded-3xl lg:border lg:border-white/10 lg:bg-[#0F1424] lg:p-3 lg:shadow-card">
+            {NAV_GROUPS.map(([group, keys]) => {
+              const visible = keys.filter((k) => ROLE_TABS[role].includes(k));
+              if (!visible.length) return null;
+              return (
+                <div key={group} className="flex gap-1.5 lg:flex-col lg:gap-1">
+                  <p className="hidden px-3 pb-1 pt-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-slate-500 lg:block">{group}</p>
+                  {visible.map((k) => {
+                    const Icon = NAV_ICONS[k] ?? Activity;
+                    const on = tab === k;
+                    return (
+                      <button key={k} onClick={() => setTab(k)} aria-current={on}
+                        className={cn("group relative flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-xl px-3.5 py-2.5 text-left text-sm font-semibold transition",
+                          on ? "bg-gradient-to-r from-[#7C3AED] to-[#4F46E5] text-white shadow-lift" : "text-slate-300 hover:bg-white/5 hover:text-white")}>
+                        <Icon className={cn("h-4 w-4 shrink-0", on ? "text-white" : "text-slate-500 group-hover:text-sky-300")} />
+                        {labelFor(k)}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
         </nav>
         <section className="min-w-0">
           {tab === "overview" ? <Overview /> : tab === "providers" ? <Providers /> : tab === "unmatched" ? <Unmatched /> : tab === "payment-methods" ? <PaymentMethods /> : RESOURCES[tab] ? <ResourceManager key={tab} name={tab} /> : tab === "tickets" ? <Tickets /> : tab === "coupons" ? <Coupons /> : tab === "tokens" ? <Tokens /> : QUEUES[tab] ? <Queue key={tab} name={tab} role={role} /> : null}
@@ -119,6 +164,15 @@ export default function AdminPage() {
   );
 }
 
+const STAT_ICONS: [RegExp, React.ComponentType<{ className?: string }>, string][] = [
+  [/player|user/, Users, "from-sky-500/25 to-sky-500/5 text-sky-300"],
+  [/withdraw|cashout|payout/, Banknote, "from-amber-500/25 to-amber-500/5 text-amber-300"],
+  [/deposit|payment|revenue/, CreditCard, "from-emerald-500/25 to-emerald-500/5 text-emerald-300"],
+  [/ticket|support/, LifeBuoy, "from-rose-500/25 to-rose-500/5 text-rose-300"],
+  [/claim|promotion/, BadgeCheck, "from-purple-500/25 to-purple-500/5 text-purple-300"],
+  [/game|provider/, Gamepad2, "from-indigo-500/25 to-indigo-500/5 text-indigo-300"],
+];
+
 function Overview() {
   const [d, setD] = useState<Record<string, number> | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -126,10 +180,17 @@ function Overview() {
   if (err) return <ErrorState message={err} />;
   if (!d) return <Skeleton className="h-40" />;
   return (
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-      {Object.entries(d).map(([k, v]) => (
-        <div key={k} className="surface p-5"><p className="text-3xl font-extrabold">{v}</p><p className="mt-1 text-xs capitalize text-muted">{k.replace(/_/g, " ")}</p></div>
-      ))}
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+      {Object.entries(d).map(([k, v]) => {
+        const [, Icon, tone] = STAT_ICONS.find(([re]) => re.test(k)) ?? [/./, Activity, "from-slate-500/25 to-slate-500/5 text-slate-300"];
+        return (
+          <div key={k} className="relative overflow-hidden rounded-2xl border border-white/10 bg-[#0F1424] p-5 shadow-card transition hover:-translate-y-0.5 hover:border-white/20">
+            <span className={cn("grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br", tone)}><Icon className="h-5 w-5" /></span>
+            <p className="mt-4 text-3xl font-black tabular-nums tracking-tight">{v}</p>
+            <p className="mt-0.5 text-xs font-semibold capitalize text-slate-400">{k.replace(/_/g, " ")}</p>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -143,22 +204,38 @@ function useList(path: string) {
   return { items, error, reload: load };
 }
 
-function Cell({ v }: { v: any }) {
-  if (typeof v === "boolean") return v ? <Check className="h-4 w-4 text-emerald-600" /> : <X className="h-4 w-4 text-muted" />;
-  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) return <>{formatDate(v)}</>;
-  return <>{v ?? "—"}</>;
+const STATUS_TONES: Record<string, string> = {
+  active: "green", completed: "green", paid: "green", fulfilled: "green", confirmed: "green", approved: "green", open: "blue", answered: "blue",
+  pending: "amber", pending_review: "amber", awaiting_staff: "amber", processing: "amber", sending: "amber", submitted: "blue", needs_review: "amber",
+  failed: "red", rejected: "red", suspended: "red", cancelled: "gray", refunded: "gray", closed: "gray", hidden: "gray", reversed: "gray",
+  superadmin: "violet", support: "blue", content: "blue", player: "gray",
+};
+const PILL: Record<string, string> = {
+  green: "bg-emerald-400/10 text-emerald-300 border-emerald-400/25", amber: "bg-amber-400/10 text-amber-300 border-amber-400/25",
+  red: "bg-rose-500/10 text-rose-300 border-rose-400/25", blue: "bg-sky-400/10 text-sky-300 border-sky-400/25",
+  gray: "bg-white/5 text-slate-300 border-white/10", violet: "bg-purple-400/10 text-purple-300 border-purple-400/25",
+};
+
+function Cell({ v, col }: { v: any; col?: string }) {
+  if (typeof v === "boolean") return v ? <Check className="h-4 w-4 text-emerald-400" /> : <X className="h-4 w-4 text-slate-500" />;
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}T/.test(v)) return <span className="whitespace-nowrap text-slate-300">{formatDate(v)}</span>;
+  if (typeof v === "string" && (col === "status" || col === "role" || col === "bonus_kind")) {
+    const tone = STATUS_TONES[v] ?? "gray";
+    return <span className={cn("inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-bold capitalize", PILL[tone])}>{v.replace(/_/g, " ")}</span>;
+  }
+  return <>{v ?? <span className="text-slate-600">—</span>}</>;
 }
 
 function Table({ columns, rows, actions }: { columns: string[]; rows: any[]; actions?: (row: any) => React.ReactNode }) {
   return (
-    <div className="surface overflow-x-auto">
+    <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#0F1424] shadow-card">
       <table className="w-full text-left text-sm">
-        <thead><tr className="border-b border-line text-xs uppercase tracking-wide text-muted">
-          {columns.map((c) => <th key={c} className="px-4 py-3 font-semibold">{c.replace(/_/g, " ")}</th>)}{actions && <th />}
+        <thead><tr className="border-b border-white/10 bg-[#141B2E] text-[11px] uppercase tracking-wider text-slate-400">
+          {columns.map((c) => <th key={c} className="whitespace-nowrap px-4 py-3 font-bold">{c.replace(/_/g, " ")}</th>)}{actions && <th />}
         </tr></thead>
-        <tbody className="divide-y divide-line">
+        <tbody className="divide-y divide-white/5">
           {rows.map((r) => (
-            <tr key={r.id}>{columns.map((c) => <td key={c} className="px-4 py-3"><Cell v={r[c]} /></td>)}{actions && <td className="px-4 py-3 text-right">{actions(r)}</td>}</tr>
+            <tr key={r.id} className="transition hover:bg-white/[0.03]">{columns.map((c) => <td key={c} className="px-4 py-3 text-slate-200"><Cell v={r[c]} col={c} /></td>)}{actions && <td className="px-4 py-3 text-right">{actions(r)}</td>}</tr>
           ))}
         </tbody>
       </table>
@@ -256,8 +333,8 @@ Hide "${row[cfg.title]}" instead?`)) {
       {error ? <ErrorState message={error} onRetry={reload} /> : !items ? <Skeleton className="h-40" /> : items.length === 0 ? <EmptyState title={`No ${cfg.label.toLowerCase()} yet`} /> : (
         <Table columns={cfg.columns} rows={items} actions={(r) => (
           <span className="inline-flex gap-1">
-            <button aria-label="Edit" className="rounded-lg p-2 hover:bg-soft" onClick={() => { setEditing(r); setMsg(null); }}><Pencil className="h-4 w-4" /></button>
-            <button aria-label="Delete" className="rounded-lg p-2 text-red-600 hover:bg-red-50" onClick={() => remove(r)}><Trash2 className="h-4 w-4" /></button>
+            <button aria-label="Edit" className="rounded-lg p-2 text-slate-300 transition hover:bg-white/10 hover:text-white" onClick={() => { setEditing(r); setMsg(null); }}><Pencil className="h-4 w-4" /></button>
+            <button aria-label="Delete" className="rounded-lg p-2 text-rose-400 transition hover:bg-rose-500/10" onClick={() => remove(r)}><Trash2 className="h-4 w-4" /></button>
           </span>
         )} />
       )}
@@ -269,11 +346,11 @@ Hide "${row[cfg.title]}" instead?`)) {
 function MiniTable({ title, cols, rows }: { title: string; cols: [string, string][]; rows: any[] }) {
   return (
     <section>
-      <h4 className="mb-1.5 text-sm font-bold">{title} <span className="font-normal text-muted">({rows.length})</span></h4>
-      {rows.length === 0 ? <p className="text-sm text-muted">None.</p> : (
-        <div className="surface overflow-x-auto"><table className="w-full text-left text-xs">
-          <thead><tr className="border-b border-line uppercase tracking-wide text-muted">{cols.map(([, h]) => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}</tr></thead>
-          <tbody className="divide-y divide-line">{rows.map((r, i) => <tr key={i}>{cols.map(([k]) => <td key={k} className="px-3 py-2"><Cell v={r[k]} /></td>)}</tr>)}</tbody>
+      <h4 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-white"><span className="h-4 w-1 rounded-full bg-gradient-to-b from-[#8B5CF6] to-[#38BDF8]" />{title} <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-slate-300">{rows.length}</span></h4>
+      {rows.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 px-4 py-3 text-sm text-slate-500">Nothing yet.</p> : (
+        <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#0C1120]"><table className="w-full text-left text-xs">
+          <thead><tr className="border-b border-white/10 bg-[#141B2E] uppercase tracking-wider text-slate-400">{cols.map(([, h]) => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}</tr></thead>
+          <tbody className="divide-y divide-white/5">{rows.map((r, i) => <tr key={i} className="hover:bg-white/[0.03]">{cols.map(([k]) => <td key={k} className="px-3 py-2 text-slate-200"><Cell v={r[k]} col={k} /></td>)}</tr>)}</tbody>
         </table></div>
       )}
     </section>
@@ -281,7 +358,7 @@ function MiniTable({ title, cols, rows }: { title: string; cols: [string, string
 }
 
 function Stat({ k, v }: { k: string; v: any }) {
-  return <div className="rounded-xl border border-line p-3"><p className="text-[11px] uppercase tracking-wide text-muted">{k}</p><p className="mt-0.5 break-all font-bold">{v ?? "—"}</p></div>;
+  return <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-3.5"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{k}</p><p className="mt-1 break-all text-base font-extrabold text-white">{v ?? "—"}</p></div>;
 }
 
 function PlayerDetails({ id, onClose }: { id: number; onClose: () => void }) {
@@ -289,10 +366,10 @@ function PlayerDetails({ id, onClose }: { id: number; onClose: () => void }) {
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { api<any>(`/admin/players/${id}/profile`).then(setD).catch((e) => setErr(errorMessage(e))); }, [id]);
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 p-4" role="dialog" aria-modal="true" aria-label="Player details" onClick={onClose}>
-      <div className="mx-auto my-6 max-w-5xl space-y-5 rounded-2xl bg-surface p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <h3 className="text-lg font-bold">Player details{d ? ` · ${d.player.username}` : ""}</h3>
+    <div className="fixed inset-0 z-[70] overflow-y-auto bg-black/75 p-3 backdrop-blur-sm sm:p-6" role="dialog" aria-modal="true" aria-label="Player details" onClick={onClose}>
+      <div className="mx-auto my-4 max-w-5xl space-y-5 rounded-3xl border border-white/10 bg-[#0B0F1C] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.7)] sm:p-7" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+          <h3 className="text-xl font-black tracking-tight">Player details{d ? <span className="text-sky-300"> · {d.player.username}</span> : ""}</h3>
           <Button size="sm" variant="secondary" onClick={onClose}>Close</Button>
         </div>
         {err ? <ErrorState message={err} onRetry={onClose} /> : !d ? <Skeleton className="h-60" /> : (<>
@@ -302,11 +379,11 @@ function PlayerDetails({ id, onClose }: { id: number; onClose: () => void }) {
             <Stat k="Last login" v={d.player.last_login_at ? formatDate(d.player.last_login_at) : null} /><Stat k="Referred by" v={d.player.referred_by} />
             <Stat k="Wallet" v={`$${d.player.wallet}`} /><Stat k="Bonus balance" v={`$${d.player.bonus_balance}`} />
           </div>
-          <div className="rounded-xl border border-line p-3 text-sm">
-            <p className="font-bold">Signup bonus (50%)</p>
+          <div className="rounded-2xl border border-amber-300/25 bg-gradient-to-r from-amber-300/10 to-transparent p-4 text-sm">
+            <p className="font-extrabold text-amber-200">Signup bonus (50%)</p>
             {d.signup_bonus.claimed
               ? <p>Claimed {d.signup_bonus.claimed_at ? formatDate(d.signup_bonus.claimed_at) : ""}{d.signup_bonus.game ? <> on <b>{d.signup_bonus.game}</b>: cash added ${d.signup_bonus.cash_added}, bonus ${d.signup_bonus.bonus_amount} added straight to the game.</> : "."}</p>
-              : <p className="text-muted">{d.signup_bonus.email_verified ? "Not claimed yet (email verified)." : "Not available: email not verified."}</p>}
+              : <p className="text-slate-400">{d.signup_bonus.email_verified ? "Not claimed yet (email verified)." : "Not available: email not verified."}</p>}
           </div>
           <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Stat k="Deposited" v={`$${d.totals.deposited}`} /><Stat k="Cash added to games" v={`$${d.totals.cash_added_to_games}`} />
@@ -582,8 +659,8 @@ function Providers() {
           <span className="inline-flex items-center gap-1">
             <Button size="sm" variant="secondary" disabled={testing === p.id} onClick={() => test(p)}>{testing === p.id ? "Testing…" : "Test"}</Button>
             <Button size="sm" variant="secondary" onClick={() => toggle(p)}>{p.is_active ? "Switch off" : "Switch on"}</Button>
-            <button aria-label="Edit" className="rounded-lg p-2 hover:bg-soft" onClick={() => { setEditing(p); setMsg(null); }}><Pencil className="h-4 w-4" /></button>
-            <button aria-label="Delete" className="rounded-lg p-2 text-red-600 hover:bg-red-50" onClick={() => remove(p)}><Trash2 className="h-4 w-4" /></button>
+            <button aria-label="Edit" className="rounded-lg p-2 text-slate-300 transition hover:bg-white/10 hover:text-white" onClick={() => { setEditing(p); setMsg(null); }}><Pencil className="h-4 w-4" /></button>
+            <button aria-label="Delete" className="rounded-lg p-2 text-rose-400 transition hover:bg-rose-500/10" onClick={() => remove(p)}><Trash2 className="h-4 w-4" /></button>
           </span>
         )} />
       )}
@@ -687,7 +764,7 @@ function PaymentMethods() {
       </form>
       {error ? <ErrorState message={error} onRetry={reload} /> : !items ? <Skeleton className="h-24" /> : items.length === 0 ? <EmptyState title="No custom settings" /> : (
         <Table columns={["value", "label", "badge", "badge_tone", "sort_order", "is_enabled"]} rows={items} actions={(r) => (
-          <button aria-label="Delete" className="rounded-lg p-2 text-red-600 hover:bg-red-50" onClick={() => remove(r.id)}><Trash2 className="h-4 w-4" /></button>
+          <button aria-label="Delete" className="rounded-lg p-2 text-rose-400 transition hover:bg-rose-500/10" onClick={() => remove(r.id)}><Trash2 className="h-4 w-4" /></button>
         )} />
       )}
     </div>

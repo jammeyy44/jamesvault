@@ -4,11 +4,11 @@ import { AlertTriangle, Inbox, Loader2 } from "lucide-react";
 
 export function Badge({ className, tone = "blue", ...props }: React.HTMLAttributes<HTMLSpanElement> & { tone?: "blue" | "green" | "amber" | "gray" | "red" }) {
   const tones = {
-    blue: "bg-soft text-primary border-line",
-    green: "bg-success/15 text-emerald-700 border-success/30",
-    amber: "bg-amber-50 text-amber-700 border-amber-200",
-    gray: "bg-slate-100 text-muted border-slate-200",
-    red: "bg-red-50 text-red-700 border-red-200",
+    blue: "bg-sky-400/10 text-sky-300 border-sky-400/25",
+    green: "bg-emerald-400/10 text-emerald-300 border-emerald-400/25",
+    amber: "bg-amber-400/10 text-amber-300 border-amber-400/25",
+    gray: "bg-white/5 text-slate-300 border-white/10",
+    red: "bg-rose-500/10 text-rose-300 border-rose-400/25",
   };
   return <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold", tones[tone], className)} {...props} />;
 }
@@ -29,8 +29,8 @@ export function EmptyState({ title, children, icon }: { title: string; children?
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div role="alert" className="surface flex flex-col items-center gap-2 border-red-200 px-6 py-10 text-center">
-      <AlertTriangle className="h-6 w-6 text-red-600" />
+    <div role="alert" className="surface flex flex-col items-center gap-2 border-rose-400/30 px-6 py-10 text-center">
+      <AlertTriangle className="h-6 w-6 text-rose-400" />
       <p className="text-sm text-ink">{message}</p>
       {onRetry && <button onClick={onRetry} className="text-sm font-semibold text-primary hover:underline">Try again</button>}
     </div>
@@ -42,7 +42,7 @@ export function Spinner({ className }: { className?: string }) {
 }
 
 export function Notice({ tone = "info", children }: { tone?: "info" | "error" | "success"; children: React.ReactNode }) {
-  const tones = { info: "border-line bg-soft text-ink", error: "border-red-200 bg-red-50 text-red-800", success: "border-success/40 bg-success/10 text-emerald-900" };
+  const tones = { info: "border-line bg-soft text-ink", error: "border-rose-400/30 bg-rose-500/10 text-rose-200", success: "border-success/40 bg-success/10 text-emerald-900" };
   return <div role={tone === "error" ? "alert" : "status"} className={cn("rounded-xl border px-4 py-3 text-sm", tones[tone])}>{children}</div>;
 }
 
