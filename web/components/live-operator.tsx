@@ -18,8 +18,8 @@ type ChatState = { enabled: boolean; messages: Msg[]; unread: number; seen_upto:
 const MAX = 1000;
 const PHOTO_MAX = 5 * 1024 * 1024;
 const VIDEO_MAX = 20 * 1024 * 1024;
-const POLL_OPEN_MS = 4000;
-const POLL_CLOSED_MS = 20000;
+const POLL_OPEN_MS = 1500;
+const POLL_CLOSED_MS = 8000;
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
 /** One tick = on its way, two grey ticks = delivered to the team, two blue ticks = the team has seen it. */
@@ -135,6 +135,7 @@ export function LiveOperator() {
       }
       setMessages((cur) => cur.filter((x) => x.id !== tempId));
       merge([m]);
+      poll();   // pick up any reply right away
     } catch (e) {
       setMessages((cur) => cur.filter((x) => x.id !== tempId));
       setText(body); if (attach) setFile(attach);      // nothing was sent: put it back so it can be retried

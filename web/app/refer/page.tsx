@@ -13,8 +13,9 @@ type Referrals = {
   code: string;
   link: string;
   rules: string;
+  bonus: string;
   counts: { pending: number; confirmed: number; rejected: number };
-  items: { player: string; status: string; created_at: string }[];
+  items: { player: string; status: string; reward: string | null; created_at: string }[];
 };
 
 export default function ReferPage() {
@@ -71,7 +72,7 @@ export default function ReferPage() {
               {(["pending", "confirmed", "rejected"] as const).map((k) => (
                 <div key={k} className="rounded-xl bg-soft p-3">
                   <p className="text-2xl font-extrabold">{data.counts[k]}</p>
-                  <p className="text-xs capitalize text-muted">{k}</p>
+                  <p className="text-xs text-muted">{k === "pending" ? "Signed up" : k === "confirmed" ? "Deposited" : "Rejected"}</p>
                 </div>
               ))}
             </div>
@@ -83,7 +84,9 @@ export default function ReferPage() {
                 {data.items.map((r, i) => (
                   <li key={i} className="flex items-center justify-between py-2.5 text-sm">
                     <span>{r.player}<span className="ml-2 text-xs text-muted">{formatDay(r.created_at)}</span></span>
-                    <Badge tone={r.status === "confirmed" ? "green" : r.status === "rejected" ? "red" : "amber"} className="capitalize">{r.status}</Badge>
+                    {r.reward
+                      ? <Badge tone="green">+${r.reward} bonus</Badge>
+                      : <Badge tone={r.status === "rejected" || r.status === "reversed" ? "red" : "amber"}>{r.status === "pending" ? "Waiting for first deposit" : r.status === "reversed" ? "Bonus taken back (refund)" : r.status}</Badge>}
                   </li>
                 ))}
               </ul>

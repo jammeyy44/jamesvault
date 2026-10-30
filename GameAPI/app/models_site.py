@@ -230,9 +230,11 @@ class Referral(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     referrer_id = db.Column(db.Integer, db.ForeignKey('players.id'), nullable=False, index=True)
     referred_id = db.Column(db.Integer, db.ForeignKey('players.id'), unique=True, nullable=False)
-    status = db.Column(db.String(20), nullable=False, default='pending')  # pending | confirmed | rejected
+    status = db.Column(db.String(20), nullable=False, default='pending')  # pending | confirmed | rejected | reversed
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
     confirmed_at = db.Column(db.DateTime, nullable=True)
+    reward_cents = db.Column(db.Integer, nullable=True)           # bonus paid to the referrer (once) for the friend's first deposit
+    qualifying_order_id = db.Column(db.Integer, nullable=True)    # the deposit that earned it (so a refund can take it back)
 
     referred = db.relationship('Player', foreign_keys=[referred_id], lazy='joined')
 

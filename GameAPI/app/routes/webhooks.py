@@ -18,7 +18,7 @@ from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from app import db
-from app.models_site import ChatMessage, Notification, PaymentOrder, Player, SupportChat, WebhookDelivery, WithdrawalOrder
+from app.models_site import Notification, PaymentOrder, Player, WebhookDelivery, WithdrawalOrder
 from app.services import bonus, telegram as tg, wallet as ledger
 from app.services.payments import PaymentError, get_payments
 from app.utils.auth import audit, utcnow
@@ -114,6 +114,7 @@ def _handle(event, data, delivery):
                     order.note = f"Credited {ledger.fmt(cents)} (provider-reported amount)"
                     order.amount_cents = cents
                 extra = bonus.grant_deposit_bonus(order)
+                bonus.grant_referral_bonus(order.player_id, cents, order)
                 _notify(order.player_id, "Deposit received", f"${ledger.fmt(cents)} was added to your wallet."
                         + (f" Plus ${ledger.fmt(extra)} Deposit Boost bonus." if extra else ""))
                 _deposit_alert(order, cents)
@@ -140,6 +141,7 @@ def _handle(event, data, delivery):
                 if ledger.debit(order.player_id, cents, 'refund', 'payment_order', order.id, allow_negative=True):
                     order.status = 'refunded'
                     bonus.reverse_deposit_bonus(order, cents, order.amount_cents)
+                    bonus.reverse_referral_bonus(order)
                     _notify(order.player_id, "Deposit refunded", f"${ledger.fmt(cents)} was taken back by the payment provider.")
                     audit("wallet.deposit_refunded", target=str(order.id), actor_type="system", detail={"cents": cents})
             return None
@@ -196,70 +198,6 @@ def telegram_webhook():
     if not hmac.compare_digest(given.encode(), secret.encode()):
         return jsonify({"error": "forbidden"}), 403
 
-    from app.routes.site.chat import mark_seen
-    from app.services import chat_media, chat_team
-
-    update = request.get_json(silent=True) or {}
-    reaction = update.get("message_reaction")
-    if reaction:  # a team member reacted to a player's message: the team has seen it (and everything before it)
-        actor = reaction.get("user") or {}
-        if (str((reaction.get("chat") or {}).get("id")) == tg.group_id() and not actor.get("is_bot") and reaction.get("new_reaction")):
-            chat_team.touch_presence()
-            seen = ChatMessage.query.filter_by(sender='player', telegram_message_id=reaction.get("message_id")).first()
-            if seen is not None:
-                mark_seen(seen.chat_id, seen.id)
-            db.session.commit()
-        return jsonify({"ok": True})
-
-    msg = update.get("message") or {}
-    sender = msg.get("from") or {}
-    text = (msg.get("text") or msg.get("caption") or "").strip()
-    photo, video = (msg.get("photo") or [None])[-1], msg.get("video")
-    has_media = any(k in msg for k in ("photo", "document", "video", "voice", "sticker", "audio", "video_note", "animation"))
-    thread = msg.get("message_thread_id")
-    in_group = str((msg.get("chat") or {}).get("id")) == tg.group_id() and not sender.get("is_bot")
-    if in_group and (text or has_media):          # anyone on the team writing anywhere in the group means the team is around
-        chat_team.touch_presence()
-        db.session.commit()
-    if not in_group or not thread or not (text or has_media):
-        return jsonify({"ok": True})  # not a reply we care about (other chat, General topic, a bot, a service message)
-
-    chat = SupportChat.query.filter_by(telegram_topic_id=int(thread)).first()
-    if chat is None:
-        return jsonify({"ok": True})
-    if text.lower().split("@")[0] == "/typing":   # Telegram doesn't tell bots who is typing, so operators can send /typing
-        chat.typing_until = utcnow() + timedelta(seconds=chat_team.TYPING_SECONDS)
-        db.session.commit()
-        return jsonify({"ok": True})
-    if text.startswith("/"):
-        return jsonify({"ok": True})
-    if ChatMessage.query.filter_by(chat_id=chat.id, sender='operator', telegram_message_id=msg.get("message_id")).first():
-        return jsonify({"ok": True})              # Telegram re-delivered an update we already stored
-
-    kind, file_name, body = 'text', None, text
-    media = photo or video
-    if media:
-        try:
-            if (media.get("file_size") or 0) > chat_media.VIDEO_MAX:
-                raise tg.TelegramError("file too large")
-            data = tg.fetch_file(media["file_id"], chat_media.VIDEO_MAX)
-            found = chat_media.sniff(data[:16])
-            if found is None:
-                raise tg.TelegramError("unsupported file type")
-            kind, ext, _mime = found
-            file_name = chat_media.save(data, ext)
-        except (tg.TelegramError, KeyError):
-            logger.warning("could not fetch an operator attachment", exc_info=True)
-            body = (text + chr(10) if text else "") + "📎 The support team sent an attachment that can't be shown here."
-    elif not text:
-        body = "📎 The support team sent an attachment that can't be shown here."
-    alias = chat_team.alias_for(sender.get("id"))   # players only ever see "Operator N", never the real name
-    db.session.add(ChatMessage(chat_id=chat.id, sender='operator', body=body[:2000], operator_name=alias, kind=kind,
-                               file_name=file_name, telegram_message_id=msg.get("message_id")))
-    chat.typing_until = None
-    mark_seen(chat.id, 10 ** 12)  # an answer means every earlier message was read
-    try:
-        db.session.commit()
-    except IntegrityError:  # a racing duplicate delivery
-        db.session.rollback()
+    from app.services import chat_bridge
+    chat_bridge.process_update(request.get_json(silent=True) or {})
     return jsonify({"ok": True})

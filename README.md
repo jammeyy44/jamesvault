@@ -146,3 +146,19 @@ Without the first three values the chat icon is hidden and no alerts are sent; n
 - **Typing:** Telegram does not tell bots who is typing either. An operator sends `/typing` in the player's topic to show "typing..." for 15 seconds; sending the reply clears it.
 - **Attachments:** players can send photos (up to 5 MB) and videos (up to 20 MB); team photos and videos sent in a topic are shown to the player. Types are checked from the file bytes, files are stored privately and only the owner can open them.
 - After upgrading, run `python seed_site.py` and `python telegram_setup.py webhook https://your-domain` again so Telegram also sends reactions.
+
+### Receiving team replies: webhook or polling
+- **Webhook** (instant, needs a public https address that reaches the API): `python telegram_setup.py webhook https://your-domain`.
+- **Polling** (instant too, needs no public address, DNS or SSL): run `python telegram_poll.py` as a service and run only one copy. Example `/etc/systemd/system/stakesweep-telegram.service`:
+  ```
+  [Unit]
+  Description=StakeSweep Telegram poller
+  After=network.target
+  [Service]
+  WorkingDirectory=/var/www/stakesweep/GameAPI
+  ExecStart=/var/www/stakesweep/GameAPI/venv/bin/python telegram_poll.py
+  Restart=always
+  [Install]
+  WantedBy=multi-user.target
+  ```
+  then `sudo systemctl daemon-reload && sudo systemctl enable --now stakesweep-telegram`. Polling removes any webhook; use one method or the other, not both.

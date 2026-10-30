@@ -173,6 +173,7 @@ def create_deposit():
         ledger.credit(player.id, order.amount_cents, 'deposit', 'payment_order', order.id)
         order.status, order.paid_at = 'paid', utcnow()
         bonus.grant_deposit_bonus(order)
+        bonus.grant_referral_bonus(player.id, order.amount_cents, order)
         tg.queue_deposit_alert(db.session, ref=order.reference_id or f"DEP-{order.id}", username=player.username, email=player.email,
                                amount_cents=order.amount_cents, method=order.method_name, sandbox=True)
     audit("wallet.deposit_created", target=str(order.id), detail={"amount_cents": order.amount_cents, "method": method["value"]})

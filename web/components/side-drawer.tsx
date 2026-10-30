@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { 
-  X, Home, Crown, Users, Headphones, LogOut, Wallet, Info, 
+  X, Home, Users, Headphones, LogOut, Wallet, Info, 
   Gamepad2, ShieldCheck, ChevronRight, Bell, LogIn, UserPlus, Gem 
 } from "lucide-react";
 import { OPEN_WALLET_EVENT, WALLET_EVENT } from "./wallet-panel";
@@ -212,7 +212,6 @@ export function SideDrawer({ open, onClose, balance }: SideDrawerProps) {
                   active={isActive("/bonus-zone")}
                   onClick={onClose}
                 />
-                <DrawerItem href="/bonus-zone" icon={<Crown className="h-5 w-5 text-amber-400" />} label="Rewards" active={false} onClick={onClose} />
                 <DrawerItem
                   href="/refer"
                   icon={<Users className="h-5 w-5 text-emerald-400" />}

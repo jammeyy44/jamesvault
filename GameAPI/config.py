@@ -73,6 +73,8 @@ class Config:
     TELEGRAM_GROUP_ID = os.getenv("TELEGRAM_GROUP_ID", "")
     TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
     TELEGRAM_DEPOSIT_TOPIC_ID = os.getenv("TELEGRAM_DEPOSIT_TOPIC_ID", "")
+    # Referral bonus: credited to the REFERRER'S bonus balance when the friend's first deposit is credited (default $10).
+    REFERRAL_BONUS_CENTS = int(os.getenv("REFERRAL_BONUS_CENTS", 1000))
     OPERATORS_ONLINE_MINUTES = int(os.getenv("OPERATORS_ONLINE_MINUTES", 10))  # "online" = team active in the group this recently
     # Number of reverse proxies in front of Flask that append to X-Forwarded-For (0 = use the socket address).
     TRUSTED_PROXY_COUNT = int(os.getenv("TRUSTED_PROXY_COUNT", 0))

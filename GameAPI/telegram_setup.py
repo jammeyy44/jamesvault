@@ -23,7 +23,12 @@ def api(method, **payload):
     r = requests.post(f"https://api.telegram.org/bot{TOKEN}/{method}", json=payload, timeout=15)
     body = r.json()
     if not body.get("ok"):
-        sys.exit(f"Telegram said no ({method}): {body.get('description')}")
+        hint = ""
+        if method == "setWebhook" and "resolve host" in (body.get("description") or ""):
+            hint = ("
+Telegram could not find that address on the internet. Use the exact public https address that reaches this API "
+                    "(check it opens in a browser), or skip webhooks and run:  python telegram_poll.py  (no public address needed).")
+        sys.exit(f"Telegram said no ({method}): {body.get('description')}{hint}")
     return body["result"]
 
 

@@ -296,9 +296,11 @@ def my_referrals():
     return jsonify({
         "code": player.referral_code, "link": link,
         "counts": {s: sum(1 for r in rows if r.status == s) for s in ("pending", "confirmed", "rejected")},
-        "items": [{"player": mask_username(r.referred.username), "status": r.status,
+        "items": [{"player": mask_username(r.referred.username), "status": r.status, "reward": f"{r.reward_cents / 100:.2f}" if r.reward_cents else None,
                    "created_at": iso(r.created_at), "confirmed_at": iso(r.confirmed_at)} for r in rows],
-        "rules": "A referral is confirmed by staff after review of a qualifying event. "
+        "bonus": f"{current_app.config['REFERRAL_BONUS_CENTS'] / 100:g}",
+        "rules": f"When a friend who joined with your link makes their first deposit, ${current_app.config['REFERRAL_BONUS_CENTS'] / 100:g} "
+                 "is added to your bonus balance. If that deposit is refunded the bonus is taken back. "
                  "Self-referrals and duplicate accounts are not eligible.",
     })
 

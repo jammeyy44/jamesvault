@@ -1,5 +1,6 @@
 "use client";
 
+import { CashoutLimitsModal } from "./cashout-limits-modal";
 import { PaymentIcon } from "./payment-icon";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -255,27 +256,6 @@ function DepositPopup({ method, limits, boost, onBack, onDone }: { method: Metho
   );
 }
 
-/** The cashout table, with the player's current limits (from their latest deposit) highlighted. */
-function CashoutRules({ rule }: { rule: NonNullable<WalletState["cashout_rule"]> }) {
-  return (
-    <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm" data-testid="cashout-rules">
-      <p className="font-bold">Cashout rules</p>
-      <p className="mt-1 text-white/70">
-        {rule.latest_deposit
-          ? <>Winnings you redeem from a game can be <b>{money(rule.min ?? 0)}</b> to <b>{money(rule.max ?? 0)}</b>, based on your latest deposit of {money(rule.latest_deposit)}.</>
-          : "Make a deposit of $5 or more: your latest deposit sets how much you can redeem."}
-      </p>
-      <table className="mt-3 w-full text-left text-xs">
-        <thead className="text-white/45"><tr><th className="py-1 font-semibold">Deposit</th><th className="py-1 font-semibold">Minimum</th><th className="py-1 font-semibold">Maximum</th></tr></thead>
-        <tbody>{rule.table.map((row, i) => (
-          <tr key={row.deposit} className={cn(rule.row === i && "bg-electric/20 font-bold text-white")}><td className="py-1.5 pl-1.5">{row.deposit}</td><td>{row.min}</td><td>{row.max}</td></tr>
-        ))}</tbody>
-      </table>
-      <p className="mt-2 text-xs text-red-200/80">{rule.note} Redeem from a game (Play, then Redeem) to move winnings into your wallet.</p>
-    </div>
-  );
-}
-
 function Cashout({ w, onDone }: { w: WalletState; onDone: () => void }) {
   const [method, setMethod] = useState<Method | null>(null);
   const [amount, setAmount] = useState("");
@@ -331,18 +311,7 @@ function Cashout({ w, onDone }: { w: WalletState; onDone: () => void }) {
         )}
       </div>
 
-      {showRules && w.cashout_rule && (
-        <div data-modal-nested className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto bg-ink/75 p-4 backdrop-blur-sm" onClick={() => setShowRules(false)}>
-          <div role="dialog" aria-modal="true" aria-label="Game Cashout Rules" className="my-auto w-full max-w-md rounded-3xl border border-white/10 bg-[#111A32] p-6 text-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-black text-white">Game Cashout Rules</h3>
-              <button onClick={() => setShowRules(false)} className="rounded-full p-1 text-white/60 hover:text-white"><X className="h-5 w-5" /></button>
-            </div>
-            <CashoutRules rule={w.cashout_rule} />
-            <button onClick={() => setShowRules(false)} className="mt-4 w-full rounded-xl bg-white/10 py-2.5 text-sm font-bold text-white hover:bg-white/15">Close</button>
-          </div>
-        </div>
-      )}
+      {showRules && <CashoutLimitsModal lead="Cashout" accent="Rules" confirmLabel="Close" onDone={() => setShowRules(false)} />}
 
       <div className="grid grid-cols-2 gap-3">
         {w.withdrawal_methods.map((m) => <Tile key={m.id} m={m} active={method?.id === m.id} onClick={() => { setMethod(m); setMsg(null); }} />)}

@@ -79,19 +79,20 @@ def chat_mark_read():
     return jsonify({"ok": True, "unread": 0})
 
 
+def _intro(player):
+    """Who the player is: put at the top of the first message in a new topic, so operators know who they are talking to."""
+    return (f"👤 <b>{tg.esc(player.username)}</b> ({tg.esc(player.email)}) · Player #{player.id}\n"
+            "Reply in this topic and the player sees it on the website.\n\n")
+
+
 def _ensure_topic(player, chat, force_new=False):
-    """Create the player's topic in the group (once) and post a short header so operators know who they are talking to."""
+    """The player's topic in the group, created on first use. Returns (topic_id, created_now)."""
     if chat.telegram_topic_id and not force_new:
-        return chat.telegram_topic_id
+        return chat.telegram_topic_id, False
     topic = tg.create_topic(player.username)
     chat.telegram_topic_id = topic
     db.session.commit()
-    try:
-        tg.send(f"👤 <b>{tg.esc(player.username)}</b> ({tg.esc(player.email)})\n🆔 Player #{player.id}\n"
-                "Reply in this topic and the player sees it on the website.", thread_id=topic)
-    except tg.TelegramError:
-        logger.warning("could not post the topic header", exc_info=True)
-    return topic
+    return topic, True
 
 
 @site_bp.route('/chat/messages', methods=['POST'])
@@ -118,14 +119,7 @@ def chat_send():
             chat = _chat_for(player)
 
     try:
-        topic = _ensure_topic(player, chat)
-        try:
-            sent = tg.send(f"💬 {tg.esc(text)}", thread_id=topic)
-        except tg.TelegramError as e:
-            if not tg.topic_is_gone(e):
-                raise
-            topic = _ensure_topic(player, chat, force_new=True)   # the topic was deleted in Telegram: start a new one
-            sent = tg.send(f"💬 {tg.esc(text)}", thread_id=topic)
+        sent = _topic_send(player, chat, lambda topic, fresh: tg.send((_intro(player) if fresh else "") + f"💬 {tg.esc(text)}", thread_id=topic))
     except tg.TelegramError as e:
         logger.error("chat message not delivered to Telegram: %s", e.description)
         return json_error("We couldn't reach our support team just now. Please try again in a moment.", 502, code="chat_undelivered")
@@ -139,13 +133,14 @@ def chat_send():
 
 def _topic_send(player, chat, send):
     """Run send(thread_id) in the player's topic; if the topic was deleted in Telegram, make a new one and retry once."""
-    topic = _ensure_topic(player, chat)
+    topic, fresh = _ensure_topic(player, chat)
     try:
-        return send(topic)
+        return send(topic, fresh)
     except tg.TelegramError as e:
         if not tg.topic_is_gone(e):
             raise
-        return send(_ensure_topic(player, chat, force_new=True))
+        topic, _ = _ensure_topic(player, chat, force_new=True)   # the topic was deleted in Telegram: start a new one
+        return send(topic, True)
 
 
 @site_bp.route('/chat/attachments', methods=['POST'])
@@ -181,7 +176,8 @@ def chat_attach():
             chat = _chat_for(player)
     label = f"💬 {tg.esc(caption)}" if caption else ""
     try:
-        sent = _topic_send(player, chat, lambda t: tg.send_media(kind, data, f"upload.{ext}", mime, label, thread_id=t))
+        sent = _topic_send(player, chat, lambda t, fresh: tg.send_media(kind, data, f"upload.{ext}", mime,
+                                                                           ((f"👤 <b>{tg.esc(player.username)}</b> · Player #{player.id}\n" if fresh else "") + label)[:1000], thread_id=t))
     except tg.TelegramError as e:
         logger.error("chat attachment not delivered to Telegram: %s", e.description)
         return json_error("We couldn't reach our support team just now. Please try again in a moment.", 502, code="chat_undelivered")

@@ -13,6 +13,7 @@ import { Spinner } from "@/components/ui/bits";
 import { OPEN_WALLET_EVENT, notifyWalletChanged } from "@/components/wallet-panel";
 import { TiredOfLosingCard } from "@/components/free-spin-modal";
 import { TestYourLuckBanner } from "@/components/test-your-luck";
+import { CashoutLimitsModal } from "@/components/cashout-limits-modal";
 import { cn } from "@/lib/utils";
 
 type Access = {
@@ -31,86 +32,6 @@ type Access = {
 };
 
 type CashResult = { status: string; sandbox: boolean; amount: string; note: string | null; source?: "wallet" | "bonus"; reason?: string };
-type LimitsInfo = { table: { deposit: string; min: string; max: string }[]; note: string; bonus?: { table: { made: string; wallet: string }[]; note: string; min: string }; facts: { min_deposit: string; max_redeem: string; min_wallet_cashout: string } };
-
-/** Shown once, right after a login is created: the cashout rules, straight from the server's table. */
-function CashoutLimitsModal({ onDone }: { onDone: () => void }) {
-  const [info, setInfo] = useState<LimitsInfo | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => { api<LimitsInfo>("/cashout-rules").then(setInfo).catch(() => setFailed(true)); }, []);
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onDone(); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onDone]);
-
-  return (
-    <div className="fixed inset-0 z-[60] grid place-items-center overflow-y-auto bg-black/80 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-label="Cashout limits" data-testid="limits-modal">
-      <div className="relative my-auto w-full max-w-md rounded-3xl border border-white/10 bg-[#0B0F1A] p-5 text-white shadow-[0_30px_80px_rgba(0,0,0,0.7)] sm:p-6">
-        <button onClick={onDone} aria-label="Close" className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-400 transition hover:text-white"><X className="h-4 w-4" /></button>
-        <h2 className="px-8 text-center text-2xl font-black uppercase tracking-[0.12em] sm:text-3xl">Cashout <span className="text-[#A78BFA]">Limits</span></h2>
-
-        {failed ? (
-          <p className="mt-6 rounded-2xl bg-white/5 p-4 text-sm text-slate-300">We couldn&apos;t load the limits right now. You can see them any time on the Cash Out screen.</p>
-        ) : !info ? (
-          <div className="grid h-48 place-items-center"><Spinner className="h-6 w-6 text-sky-400" /></div>
-        ) : (
-          <>
-            <div className="mt-5 overflow-hidden rounded-2xl border border-white/10">
-              <table className="w-full text-left" data-testid="limits-table">
-                <thead className="bg-[#121826] text-xs font-extrabold uppercase tracking-wider text-blue-400">
-                  <tr><th className="px-4 py-3">Deposit</th><th className="px-3 py-3">Minimum</th><th className="px-3 py-3">Maximum</th></tr>
-                </thead>
-                <tbody className="text-sm">
-                  {info.table.map((row) => (
-                    <tr key={row.deposit} className="border-t border-white/[0.06]">
-                      <td className="px-4 py-3.5 font-bold text-white">{row.deposit}</td>
-                      <td className="px-3 py-3.5 font-semibold text-slate-300">{row.min}</td>
-                      <td className="px-3 py-3.5 font-semibold text-slate-300">{row.max}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-4 grid grid-cols-3 gap-2.5">
-              {([["Min deposit", info.facts.min_deposit], ["Max per redeem", info.facts.max_redeem], ["Min wallet cashout", info.facts.min_wallet_cashout]] as const).map(([label, value]) => (
-                <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.03] px-2 py-3 text-center">
-                  <p className="text-[10px] font-semibold uppercase leading-tight tracking-wider text-slate-400">{label}</p>
-                  <p className="mt-1.5 text-lg font-extrabold text-cyan-300">{value}</p>
-                </div>
-              ))}
-            </div>
-
-            {info.bonus && (
-              <div className="mt-4 rounded-2xl border border-[#ffd966]/30 bg-[#ffd966]/10 p-3.5 text-sm text-[#ffd966]" data-testid="limits-bonus">
-                <p className="font-bold">Bonus balance rule</p>
-                <p className="mt-1 text-xs text-[#ffd966]/90">If you play with bonus only, your game balance must reach {info.bonus.min} to cash out:</p>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  {info.bonus.table.map((t) => (
-                    <div key={t.made} className="rounded-xl bg-black/20 px-3 py-2 text-center">
-                      <p className="text-[11px] text-[#ffd966]/70">{t.made}</p>
-                      <p className="text-base font-extrabold text-emerald-300">{t.wallet} to wallet</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-sm font-semibold text-amber-300">
-              <Info className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>NOTE: {info.note.replace(/^Winning amount/i, "winning").replace(/\.$/, "")}.</span>
-            </div>
-            <p className="mt-2 text-center text-[11px] text-slate-500">x3 / x12 mean 3 / 12 times the cash you added.</p>
-          </>
-        )}
-
-        <button onClick={onDone} data-testid="limits-understand" className="mt-4 h-12 w-full rounded-2xl bg-gradient-to-r from-[#3B82F6] to-[#8B5CF6] text-base font-black text-white shadow-lg transition hover:brightness-110 active:scale-[0.98]">I Understand</button>
-      </div>
-    </div>
-  );
-}
-
 type RedeemPreview = {
   table: { deposit: string; min: string; max: string }[]; note: string; sandbox: boolean; latest_deposit: string | null;
   rule: { row: number; deposit: string; min: string; max: string } | null; game_balance: string | null; payout: string | null;

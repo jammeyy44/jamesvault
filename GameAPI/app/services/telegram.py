@@ -24,6 +24,8 @@ from sqlalchemy.orm import Session
 logger = logging.getLogger("jamesvault.telegram")
 API = "https://api.telegram.org/bot{token}/{method}"
 TIMEOUT = 8
+_http = requests.Session()  # one pooled connection: no new TLS handshake for every call (this is most of a send's latency)
+_http.mount("https://", requests.adapters.HTTPAdapter(pool_connections=4, pool_maxsize=16))
 
 
 class TelegramError(Exception):
@@ -49,9 +51,9 @@ def _post(token, method, payload, files=None):
     (Tests replace this function.)"""
     try:
         if files:
-            resp = requests.post(API.format(token=token, method=method), data=payload, files=files, timeout=60)
+            resp = _http.post(API.format(token=token, method=method), data=payload, files=files, timeout=60)
         else:
-            resp = requests.post(API.format(token=token, method=method), json=payload, timeout=TIMEOUT)
+            resp = _http.post(API.format(token=token, method=method), json=payload, timeout=TIMEOUT)
         body = resp.json()
     except (requests.RequestException, ValueError) as e:
         raise TelegramError(f"Telegram unreachable ({type(e).__name__})") from e

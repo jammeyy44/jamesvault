@@ -74,9 +74,9 @@ def test_first_message_creates_a_topic_named_after_the_player_and_posts_into_it(
     assert r.status_code == 201 and r.get_json()["sender"] == "player"
     topic = next(p for m, p in telegram.calls if m == "createForumTopic")
     assert topic == {"chat_id": GROUP, "name": me["username"]}
-    header, message = telegram.sent()
-    assert me["email"] in header["text"] and header["message_thread_id"] == 101
-    assert message["text"] == "💬 Hello &lt;b&gt;team&lt;/b&gt;" and message["message_thread_id"] == 101      # user text can't inject markup
+    (message,) = telegram.sent()                      # ONE call: who the player is travels inside the first message
+    assert me["email"] in message["text"] and message["message_thread_id"] == 101
+    assert message["text"].endswith("💬 Hello &lt;b&gt;team&lt;/b&gt;")                                       # user text can't inject markup
     assert SupportChat.query.one().telegram_topic_id == 101
 
 

@@ -36,14 +36,14 @@ export function ReferBanner() {
             <div>
               <div className="flex items-center gap-2">
                 <h2 id="refer-title" className="text-sm sm:text-base font-extrabold tracking-tight text-white">
-                  Refer Friends & Earn Diamonds
+                  Refer Friends & Earn Bonus
                 </h2>
                 <span className="hidden sm:inline-flex items-center gap-1 rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-bold text-sky-400 border border-sky-400/20">
                   <Gift className="h-3 w-3" /> Lucky Shop
                 </span>
               </div>
               <p className="hidden md:block text-xs text-slate-300">
-                Share your personal link to unlock bonus boxes and diamonds for verified invites.
+                Share your link: when a friend you invite makes their first deposit, bonus balance is added to your account.
               </p>
             </div>
           </div>

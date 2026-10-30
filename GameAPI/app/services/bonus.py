@@ -213,6 +213,42 @@ def grant_deposit_bonus(order) -> int:
     return 0
 
 
+def grant_referral_bonus(referred_id, amount_cents, order=None) -> int:
+    """The referred player's first credited deposit pays their referrer a bonus-balance reward (once, ever).
+
+    Returns the cents paid (0 when nothing was due). Not paid for: a deposit under the minimum, a referral staff rejected, a
+    referral already rewarded, a suspended referrer, or a self-referral. Idempotent through the ledger."""
+    from flask import current_app
+    from app.models_site import Notification
+    ref = Referral.query.filter_by(referred_id=referred_id).first()
+    if ref is None or ref.status in ("rejected", "reversed") or ref.reward_cents or ref.referrer_id == ref.referred_id:
+        return 0
+    if amount_cents < int(current_app.config["DEPOSIT_MIN"] * 100):
+        return 0
+    referrer = db.session.get(Player, ref.referrer_id)
+    if referrer is None or referrer.status != "active":
+        return 0
+    cents = int(current_app.config.get("REFERRAL_BONUS_CENTS") or 0)
+    if cents <= 0 or not ledger.credit(ref.referrer_id, cents, "referral_bonus", "referral", ref.id, bucket="bonus"):
+        return 0
+    ref.reward_cents, ref.status, ref.confirmed_at = cents, "confirmed", utcnow()
+    ref.qualifying_order_id = getattr(order, "id", None)
+    db.session.add(Notification(player_id=ref.referrer_id, title="Referral bonus",
+                                body=f"${cents / 100:g} was added to your bonus balance: a friend you invited made their first deposit."))
+    return cents
+
+
+def reverse_referral_bonus(order) -> int:
+    """The deposit that earned a referral bonus was refunded: take the bonus back (recorded even if already spent)."""
+    ref = Referral.query.filter_by(qualifying_order_id=order.id).first() if order is not None else None
+    if ref is None or not ref.reward_cents or ref.status == "reversed":
+        return 0
+    if ledger.debit(ref.referrer_id, ref.reward_cents, "referral_bonus_reversal", "referral", ref.id, allow_negative=True, bucket="bonus"):
+        ref.status = "reversed"
+        return ref.reward_cents
+    return 0
+
+
 def reverse_deposit_bonus(order, refunded_cents: int, paid_cents: int):
     """A refunded deposit takes back its proportional share of the bonus (recorded even if already spent)."""
     if not order.bonus_cents or paid_cents <= 0:
