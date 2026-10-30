@@ -21,8 +21,58 @@ def _mark_seen(chat_id, upto_id):
     mark_seen(chat_id, upto_id)
 
 
+def _handle_callback(cb: dict) -> None:
+    """A press on an Approve / Reject button under a cashout alert. Only trusted people may use them."""
+    from app.models_site import WithdrawalOrder
+    from app.services import withdrawals
+    cid = cb.get("id")
+    msg = cb.get("message") or {}
+    user = cb.get("from") or {}
+    data = str(cb.get("data") or "")
+    parts = data.split(":")
+    if (str((msg.get("chat") or {}).get("id")) != tg.group_id() or user.get("is_bot") or len(parts) != 3 or parts[0] != "wd"
+            or not parts[2].isdigit()):
+        tg.answer_callback(cid)
+        return
+    action, wid = parts[1], int(parts[2])
+    if not tg.is_approver(user.get("id")):
+        tg.answer_callback(cid, "Only the people allowed to handle cashouts can use these buttons.", alert=True)
+        return
+    who = user.get("first_name") or user.get("username") or "staff"
+    order = db.session.get(WithdrawalOrder, wid)
+    if order is None:
+        tg.answer_callback(cid, "That cashout no longer exists.", alert=True)
+        return
+    if order.status != "pending_review" and action in ("ask", "yes", "reject", "back"):
+        tg.answer_callback(cid, "This cashout was already handled.", alert=True)
+        tg.refresh_withdrawal_alert_now(wid)
+        return
+    chat_id, message_id = msg["chat"]["id"], msg["message_id"]
+    if action == "ask":       # one more tap before money moves
+        tg.call("editMessageReplyMarkup", {"chat_id": chat_id, "message_id": message_id, "reply_markup": tg.confirm_keyboard(wid, order.amount_cents)})
+        tg.answer_callback(cid, "Confirm to send the payout.")
+    elif action == "back":
+        tg.call("editMessageReplyMarkup", {"chat_id": chat_id, "message_id": message_id, "reply_markup": tg.withdrawal_keyboard(wid)})
+        tg.answer_callback(cid)
+    elif action == "yes":
+        code, payload = withdrawals.approve(wid, actor_type="telegram", actor_id=user.get("id"), handled_by=who)
+        status = payload.get("status")
+        tg.answer_callback(cid, payload.get("error") if code != 200 else
+                           "Payout sent to Paydora." if status in ("submitted", "completed") else
+                           "Outcome unclear: check Paydora before doing anything else." if status == "needs_review" else
+                           "Paydora refused it. The money was returned to the player.", alert=(code != 200 or status == "needs_review"))
+    elif action == "reject":
+        code, payload = withdrawals.reject(wid, actor_type="telegram", actor_id=user.get("id"), handled_by=who)
+        tg.answer_callback(cid, "Rejected. The money was returned to the player." if code == 200 else payload.get("error"), alert=code != 200)
+    else:
+        tg.answer_callback(cid)
+
+
 def process_update(update: dict) -> None:
-    """Handle one Telegram update (a group message or a reaction). Never raises for content it does not care about."""
+    """Handle one Telegram update (a group message, a reaction or a button press). Never raises for content it does not care about."""
+    if update.get("callback_query"):
+        _handle_callback(update["callback_query"])
+        return
     reaction = update.get("message_reaction")
     if reaction:  # a team member reacted to a player's message: the team has seen it (and everything before it)
         actor = reaction.get("user") or {}

@@ -71,8 +71,10 @@ def create_topic(name: str) -> int:
     return int(result["message_thread_id"])
 
 
-def send(text: str, thread_id=None, html_mode=True):
+def send(text: str, thread_id=None, html_mode=True, reply_markup=None):
     payload = {"chat_id": group_id(), "text": text[:4000], "disable_web_page_preview": True}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     if thread_id:
         payload["message_thread_id"] = int(thread_id)
     if html_mode:
@@ -147,6 +149,117 @@ def queue_deposit_alert(session, **fields):
     })
 
 
+# ------------------------------------------------------------------ cashout requests: alert with Approve / Reject buttons
+WD_HEADLINE = {
+    "pending_review": "Pending review ⏳", "sending": "Sending… ⏳", "submitted": "Approved ✅ (sent to Paydora)",
+    "completed": "Completed ✅", "rejected": "Rejected ❌", "cancelled": "Cancelled by the player", "failed": "Failed ❌ (money returned to the player)",
+    "needs_review": "Needs review ⚠️ (check Paydora)", "failed_at_provider": "Failed at the provider ⚠️", "credited_back": "Credited back ↩",
+}
+
+
+def withdrawal_text(order, player, handled_by=None) -> str:
+    lines = [f"📋 Ref: WD-{order.id}", f"👤 User: {esc(player.username)} ({esc(player.email)})", f"💰 Amount: ${order.amount_cents / 100:,.2f}",
+             f"💳 Method: {esc(order.method_name)}", f"📍 Send to: {esc(order.address_enc)}"]
+    if order.chime_name:
+        lines.append(f"🙍 Name on account: {esc(order.chime_name)}")
+    lines.append(f"📊 Status: {esc(WD_HEADLINE.get(order.status, order.status))}")
+    if handled_by and order.status != "pending_review":
+        lines.append(f"🧑\u200d💼 By: {esc(handled_by)}")
+    if order.sandbox:
+        lines.append("🧪 SANDBOX (test cashout, no real money)")
+    return "\n".join(lines)
+
+
+def withdrawal_keyboard(wid):
+    return {"inline_keyboard": [[{"text": "✅ Approve", "callback_data": f"wd:ask:{wid}"}, {"text": "❌ Reject", "callback_data": f"wd:reject:{wid}"}]]}
+
+
+def confirm_keyboard(wid, amount_cents):
+    return {"inline_keyboard": [[{"text": f"✅ Yes, send ${amount_cents / 100:,.2f}", "callback_data": f"wd:yes:{wid}"},
+                                 {"text": "↩ Back", "callback_data": f"wd:back:{wid}"}]]}
+
+
+def answer_callback(callback_id, text="", alert=False):
+    try:
+        call("answerCallbackQuery", {"callback_query_id": callback_id, "text": text[:190], "show_alert": alert})
+    except TelegramError:
+        logger.warning("could not answer a callback", exc_info=True)
+
+
+def is_approver(user_id) -> bool:
+    """Only people trusted with money may press the buttons: the listed ids, or (when none are listed) the group's admins."""
+    allowed = [x.strip() for x in _cfg("TELEGRAM_APPROVER_IDS").split(",") if x.strip()]
+    if allowed:
+        return str(user_id) in allowed
+    try:
+        member = call("getChatMember", {"chat_id": group_id(), "user_id": user_id})
+    except TelegramError:
+        return False
+    return member.get("status") in ("creator", "administrator")
+
+
+def _run_async(fn, *args):
+    """Run fn(*args) in its own thread with its own app context and database session (it must not touch the committing
+    session). With TELEGRAM_SYNC set (tests) the caller waits for it to finish so results are deterministic."""
+    from app import db
+    wait = bool(current_app.config.get("TELEGRAM_SYNC"))
+    app = current_app._get_current_object()
+
+    def run():
+        with app.app_context():
+            try:
+                fn(*args)
+            except Exception:
+                logger.warning("telegram cashout alert failed", exc_info=True)
+            finally:
+                db.session.remove()
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    if wait:
+        t.join(timeout=15)
+
+
+def _post_withdrawal_alert(wid):
+    from app import db
+    from app.models_site import Player, WithdrawalOrder
+    order = db.session.get(WithdrawalOrder, wid)
+    if order is None or not configured():
+        return
+    player = db.session.get(Player, order.player_id)
+    topic = _cfg("TELEGRAM_WITHDRAWAL_TOPIC_ID") or None
+    sent = send(withdrawal_text(order, player), thread_id=topic,
+                reply_markup=withdrawal_keyboard(wid) if order.status == "pending_review" else None)
+    order.telegram_message_id = (sent or {}).get("message_id")
+    db.session.commit()
+
+
+def refresh_withdrawal_alert_now(wid, handled_by=None):
+    """Edit the group message to the order's current status (and drop the buttons once it is no longer pending)."""
+    from app import db
+    from app.models_site import Player, WithdrawalOrder
+    order = db.session.get(WithdrawalOrder, wid)
+    if order is None or not order.telegram_message_id or not configured():
+        return
+    player = db.session.get(Player, order.player_id)
+    markup = withdrawal_keyboard(wid) if order.status == "pending_review" else {"inline_keyboard": []}
+    try:
+        call("editMessageText", {"chat_id": group_id(), "message_id": int(order.telegram_message_id), "text": withdrawal_text(order, player, handled_by)[:4000],
+                                 "parse_mode": "HTML", "disable_web_page_preview": True, "reply_markup": markup})
+    except TelegramError as e:
+        if "not modified" not in (e.description or "").lower():
+            logger.warning("could not update the cashout alert: %s", e.description)
+
+
+def queue_withdrawal_alert(session, wid):
+    if configured():
+        session.info.setdefault("tg_pending", []).append({"kind": "wd_alert", "wid": wid})
+
+
+def queue_withdrawal_refresh(session, wid, handled_by=None):
+    if configured():
+        session.info.setdefault("tg_pending", []).append({"kind": "wd_refresh", "wid": wid, "handled_by": handled_by})
+
+
 def _deliver(item):
     payload = {"chat_id": item["chat"], "text": item["text"][:4000], "parse_mode": "HTML", "disable_web_page_preview": True}
     if item["topic"]:
@@ -160,6 +273,12 @@ def _deliver(item):
 @event.listens_for(Session, "after_commit")
 def _send_pending(session):
     for item in session.info.pop("tg_pending", []) or []:
+        if item.get("kind") == "wd_alert":
+            _run_async(_post_withdrawal_alert, item["wid"])
+            continue
+        if item.get("kind") == "wd_refresh":
+            _run_async(refresh_withdrawal_alert_now, item["wid"], item.get("handled_by"))
+            continue
         if item["sync"]:
             _deliver(item)
         else:

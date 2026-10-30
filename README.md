@@ -162,3 +162,8 @@ Without the first three values the chat icon is hidden and no alerts are sent; n
   WantedBy=multi-user.target
   ```
   then `sudo systemctl daemon-reload && sudo systemctl enable --now stakesweep-telegram`. Polling removes any webhook; use one method or the other, not both.
+
+### Cashout requests in Telegram
+Every new cashout request is posted to the support group (optionally into its own topic, `TELEGRAM_WITHDRAWAL_TOPIC_ID`) with **Approve** and **Reject** buttons. Approve asks for one more tap ("Yes, send $X") before anything moves. Approving creates the payout request at Paydora (`POST /withdrawals/create`, idempotent); rejecting returns the held money to the player's wallet. The message updates as the status changes, whether the action came from Telegram, the admin panel, the player (cancel) or Paydora.
+- Who may press the buttons: the Telegram user ids in `TELEGRAM_APPROVER_IDS` (comma separated) or, when that is empty, the group's admins. Ordinary members cannot.
+- After upgrading run `python seed_site.py` and re-run `python telegram_setup.py webhook https://your-domain` (or restart `telegram_poll.py`) so Telegram also sends button presses.

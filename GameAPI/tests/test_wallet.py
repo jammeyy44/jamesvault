@@ -71,6 +71,7 @@ def pay(app, monkeypatch, features):
     monkeypatch.setattr("app.routes.site.wallet.get_payments", lambda: fake)
     monkeypatch.setattr("app.routes.webhooks.get_payments", lambda: fake)
     monkeypatch.setattr("app.routes.site.admin_wallet.get_payments", lambda: fake)
+    monkeypatch.setattr("app.services.withdrawals.get_payments", lambda: fake)
     yield fake
     cfg["PAYDORA_API_KEY"], cfg["PAYDORA_WEBHOOK_SECRET"] = old
     wallet_routes._methods_cache.update(at=0.0, data=None, mode=None)

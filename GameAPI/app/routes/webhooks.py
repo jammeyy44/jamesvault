@@ -159,15 +159,18 @@ def _handle(event, data, delivery):
         if event == "withdrawal.completed":
             if w.status in ('submitted', 'sending', 'needs_review', 'failed_at_provider'):
                 w.status, w.processed_at = 'completed', utcnow()
+                tg.queue_withdrawal_refresh(db.session, w.id)
                 _notify(w.player_id, "Cashout sent", f"${ledger.fmt(w.amount_cents)} via {w.method_name}.")
         elif event == "withdrawal.cancelled":
             if w.status in ('submitted', 'sending', 'needs_review'):
                 w.status, w.processed_at = 'cancelled', utcnow()
+                tg.queue_withdrawal_refresh(db.session, w.id)
                 ledger.credit(w.player_id, w.amount_cents, 'withdrawal_refund', 'withdrawal', w.id)  # nothing was paid
                 _notify(w.player_id, "Cashout cancelled", f"${ledger.fmt(w.amount_cents)} was returned to your wallet.")
         elif event == "withdrawal.failed_at_provider":
             # Sent but the player never received it; the provider returned it to the merchant. Staff decide how to make it right.
             w.status, w.note = 'failed_at_provider', "Sent but not received by the player. Staff will follow up."
+            tg.queue_withdrawal_refresh(db.session, w.id)
             delivery.handled = False
             delivery.summary = f"Withdrawal {w.id} failed at provider: review and credit back or re-send"
         return None

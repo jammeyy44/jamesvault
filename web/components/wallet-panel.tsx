@@ -68,6 +68,10 @@ export function WalletBody() {
     try { setW(await api<WalletState>("/wallet")); setError(null); } catch (e) { setError(errorMessage(e)); }
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {   // a deposit confirmed by the payment provider shows up while the wallet is open
+    const t = setInterval(() => { if (!document.hidden) load(); }, 6000);
+    return () => clearInterval(t);
+  }, [load]);
   const changed = useCallback(() => { load(); notifyWalletChanged(); }, [load]);
 
   if (error) return <p role="alert" className="rounded-2xl bg-red-500/15 p-4 text-sm text-red-200">{error}</p>;

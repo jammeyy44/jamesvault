@@ -55,6 +55,16 @@ def _decorate(methods):
     return sorted(out, key=lambda x: (x["order"], x["name"]))
 
 
+@site_bp.route('/wallet/balance')
+@player_required
+def wallet_balance():
+    """Just the two balances, read straight from the database: no payment-provider call, so the header can refresh it every few seconds."""
+    player = current_player()
+    enabled = payments_mode() != "disabled"
+    return jsonify({"enabled": enabled, "balance": ledger.fmt(player.wallet_cents) if enabled else None,
+                    "bonus_balance": ledger.fmt(player.bonus_cents)})
+
+
 @site_bp.route('/wallet')
 @player_required
 def wallet():
@@ -225,6 +235,7 @@ def create_withdrawal():
         db.session.flush()
         ledger.debit(player.id, cents, 'withdrawal', 'withdrawal', order.id)  # hold the funds now
         audit("wallet.withdrawal_requested", target=str(order.id), detail={"amount_cents": cents, "method": method["value"]})
+        tg.queue_withdrawal_alert(db.session, order.id)
         db.session.commit()
     except ledger.InsufficientFunds:
         db.session.rollback()
@@ -248,6 +259,7 @@ def cancel_withdrawal(wid):
     order = db.session.get(WithdrawalOrder, wid)
     ledger.credit(player.id, order.amount_cents, 'withdrawal_refund', 'withdrawal', order.id)
     audit("wallet.withdrawal_cancelled", target=str(wid))
+    tg.queue_withdrawal_refresh(db.session, wid)
     db.session.commit()
     return jsonify(_withdrawal_view(order))
 

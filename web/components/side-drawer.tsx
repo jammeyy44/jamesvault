@@ -34,7 +34,7 @@ export function SideDrawer({ open, onClose, balance }: SideDrawerProps) {
   useEffect(() => {
     if (!player || !open) return;
     let live = true;
-    const read = () => api<{ bonus_balance?: string }>("/wallet").then((r) => { if (live) setBonus(r.bonus_balance ?? "0.00"); }).catch(() => {});
+    const read = () => api<{ bonus_balance?: string }>("/wallet/balance").then((r) => { if (live) setBonus(r.bonus_balance ?? "0.00"); }).catch(() => {});
     read();
     window.addEventListener(WALLET_EVENT, read);
     return () => { live = false; window.removeEventListener(WALLET_EVENT, read); };

@@ -6,7 +6,7 @@ from app import db
 from app.models_site import (
     Notification, PaymentMethodSetting, PaymentOrder, Player, WebhookDelivery, WithdrawalOrder, iso,
 )
-from app.services import bonus, telegram as tg, wallet as ledger
+from app.services import bonus, telegram as tg, wallet as ledger, withdrawals
 from app.services.payments import PaymentError, get_payments
 from app.utils.auth import admin_required, audit, json_error, utcnow
 
@@ -66,18 +66,15 @@ def admin_withdrawal_update(wid):
         _notify(order.player_id, f"Cashout {final_status}", f"${ledger.fmt(order.amount_cents)} was returned to your wallet.")
 
     if action == 'reject':
-        if not _claim(wid, 'pending_review', 'rejected'):
-            return json_error("This cashout has already been handled.", 409)
-        refund('rejected')
-        audit("withdrawal.reject", target=str(wid))
-        db.session.commit()
-        return jsonify({"status": "rejected"})
+        code, payload = withdrawals.reject(wid)
+        return jsonify(payload), code
 
     if action == 'credit_back':
         if not _claim(wid, 'failed_at_provider', 'credited_back'):
             return json_error("Only payouts that failed at the provider can be credited back.", 409)
         refund('credited back', "Returned after the payout did not reach you.")
         audit("withdrawal.credit_back", target=str(wid))
+        tg.queue_withdrawal_refresh(db.session, wid)
         db.session.commit()
         return jsonify({"status": "credited_back"})
 
@@ -90,41 +87,13 @@ def admin_withdrawal_update(wid):
             order = db.session.get(WithdrawalOrder, wid)
             order.processed_at, order.note = utcnow(), "Reconciled by staff: sent."
         audit("withdrawal.resolve", target=str(wid), detail={"action": action})
+        tg.queue_withdrawal_refresh(db.session, wid)
         db.session.commit()
         return jsonify({"status": "completed" if action == 'resolve_completed' else 'failed'})
 
-    # approve: atomic claim so two admins (or a double click) can never send the payout twice
-    if not _claim(wid, 'pending_review', 'sending'):
-        return json_error("This cashout has already been handled.", 409)
-    order = db.session.get(WithdrawalOrder, wid)
-    payments = get_payments()
-    if payments is None:
-        order.status = 'pending_review'  # nothing was sent; put it back
-        db.session.commit()
-        return json_error("Payments are not enabled.", 501)
-    player = db.session.get(Player, order.player_id)
-    try:
-        resp = payments.create_withdrawal(method_id=order.method_id, amount=ledger.fmt(order.amount_cents),
-                                          address=order.address_enc, user_name=player.username,
-                                          chime_name=order.chime_name, idempotency_key=f"jv-wd-{order.id}")
-        order.provider_withdrawal_id = resp.get("id")
-        order.reference_id = resp.get("referenceId")
-        order.status = 'completed' if order.sandbox else 'submitted'
-        if order.sandbox:
-            order.processed_at = utcnow()
-    except PaymentError as e:
-        if e.definitive:  # the provider refused it: nothing was sent, give the money back
-            order.status, order.note = 'failed', str(e)[:300]
-            refund('failed', str(e)[:300])
-        else:  # unknown outcome: keep the funds held and reconcile by hand; never retry blindly
-            order.status = 'needs_review'
-            order.note = "Provider outcome unknown. Check the provider dashboard, then resolve by hand."
-    except Exception:
-        order.status = 'needs_review'
-        order.note = "Provider outcome unknown. Check the provider dashboard, then resolve by hand."
-    audit("withdrawal.approve", target=str(wid), detail={"result": order.status})
-    db.session.commit()
-    return jsonify({"status": order.status, "note": order.note})
+    # approve: the shared service claims the order atomically, so two admins (or Telegram and the site) can never send it twice
+    code, payload = withdrawals.approve(wid)
+    return jsonify(payload), code
 
 
 # ---------------------------------------------------------------- deposits + unmatched payments

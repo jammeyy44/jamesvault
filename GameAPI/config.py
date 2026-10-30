@@ -75,6 +75,9 @@ class Config:
     TELEGRAM_DEPOSIT_TOPIC_ID = os.getenv("TELEGRAM_DEPOSIT_TOPIC_ID", "")
     # Referral bonus: credited to the REFERRER'S bonus balance when the friend's first deposit is credited (default $10).
     REFERRAL_BONUS_CENTS = int(os.getenv("REFERRAL_BONUS_CENTS", 1000))
+    TELEGRAM_WITHDRAWAL_TOPIC_ID = os.getenv("TELEGRAM_WITHDRAWAL_TOPIC_ID", "")  # optional topic for cashout requests
+    # Who may press Approve/Reject on a cashout in Telegram: a comma-separated list of Telegram user ids, or (empty) any group admin.
+    TELEGRAM_APPROVER_IDS = os.getenv("TELEGRAM_APPROVER_IDS", "")
     OPERATORS_ONLINE_MINUTES = int(os.getenv("OPERATORS_ONLINE_MINUTES", 10))  # "online" = team active in the group this recently
     # Number of reverse proxies in front of Flask that append to X-Forwarded-For (0 = use the socket address).
     TRUSTED_PROXY_COUNT = int(os.getenv("TRUSTED_PROXY_COUNT", 0))

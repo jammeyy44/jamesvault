@@ -31,7 +31,7 @@ def main():
         offset = None
         while True:
             try:
-                payload = {"timeout": WAIT, "allowed_updates": ["message", "message_reaction"]}
+                payload = {"timeout": WAIT, "allowed_updates": ["message", "message_reaction", "callback_query"]}
                 if offset is not None:
                     payload["offset"] = offset
                 body = requests.post(base + "getUpdates", json=payload, timeout=WAIT + 10).json()
@@ -54,4 +54,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        log.info("Stopped.")

@@ -37,10 +37,15 @@ export function Header() {
   useEffect(() => {
     if (!player) { setBalance(null); return; }
     let live = true;
-    const read = () => api<{ enabled: boolean; balance: string | null }>("/wallet").then((r) => { if (live) setBalance(r.enabled ? r.balance : null); }).catch(() => {});
+    // The light balance endpoint (no payment-provider call) is read straight away, every few seconds while the tab is visible,
+    // whenever the wallet changes, and the moment the player comes back to the tab (e.g. after paying on the provider's page).
+    const read = () => { if (document.hidden) return; api<{ enabled: boolean; balance: string | null }>("/wallet/balance").then((r) => { if (live) setBalance(r.enabled ? r.balance : null); }).catch(() => {}); };
     read();
+    const timer = setInterval(read, 4000);
     window.addEventListener(WALLET_EVENT, read);
-    return () => { live = false; window.removeEventListener(WALLET_EVENT, read); };
+    window.addEventListener("focus", read);
+    document.addEventListener("visibilitychange", read);
+    return () => { live = false; clearInterval(timer); window.removeEventListener(WALLET_EVENT, read); window.removeEventListener("focus", read); document.removeEventListener("visibilitychange", read); };
   }, [player]);
 
   useEffect(() => {

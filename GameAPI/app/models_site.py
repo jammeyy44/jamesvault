@@ -447,6 +447,7 @@ class WithdrawalOrder(db.Model):
     # pending_review -> sending -> submitted -> completed | cancelled | failed_at_provider ; or rejected | cancelled(by player)
     # needs_review (ambiguous send) | credited_back (staff returned funds after failed_at_provider)
     status = db.Column(db.String(24), nullable=False, default='pending_review')
+    telegram_message_id = db.Column(db.BigInteger, nullable=True)   # the cashout alert in the Telegram group (edited as the status changes)
     provider_withdrawal_id = db.Column(db.String(40), unique=True, nullable=True)
     reference_id = db.Column(db.String(40), nullable=True)
     note = db.Column(db.String(300), nullable=True)
