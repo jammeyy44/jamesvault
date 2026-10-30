@@ -54,6 +54,11 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link className="hover:text-sky-400 transition" href="/cashout-rules">
+                  Cashout Rules
+                </Link>
+              </li>
+              <li>
                 <Link className="hover:text-sky-400 transition" href="/legal/responsible-gaming">
                   Responsible Gaming
                 </Link>
