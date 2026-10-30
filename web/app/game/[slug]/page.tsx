@@ -111,6 +111,16 @@ export default function FullscreenGamePage() {
     status: "active",
   };
 
+  const openedCash = useRef(false);
+  useEffect(() => { openedCash.current = false; setStep("dashboard"); setAccess(null); }, [slug]); // switching game starts that game fresh
+  useEffect(() => {
+    if (openedCash.current || !access?.account) return;
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("add") === "1") {
+      openedCash.current = true;
+      setStep("cash");
+    }
+  }, [access]);
+
   const loadAccess = useCallback(async () => {
     try {
       const res = await api<Access>(`/games/${slug}/access`);
@@ -573,6 +583,14 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
     api<{ balance: string }>(`/games/${state.game.slug}/balance`).then((r) => setGameBal(Number(r.balance))).catch(() => setGameBal(null));
   }, [state.game.slug]);
   const gameHasBalance = gameBal !== null && gameBal >= 1;
+  // While this game still has money, offer the other games so the player can add cash there instead.
+  const [others, setOthers] = useState<{ slug: string; name: string; image_url: string | null }[]>([]);
+  useEffect(() => {
+    if (!gameHasBalance) return;
+    api<{ items: { slug: string; name: string; image_url: string | null }[] }>("/games?per_page=60")
+      .then((r) => setOthers(r.items.filter((g) => g.slug !== state.game.slug)))
+      .catch(() => setOthers([]));
+  }, [gameHasBalance, state.game.slug]);
   const [amount, setAmount] = useState(lowWallet ? Math.min(10, bonus) : (quick[1] ?? 10));
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -619,6 +637,21 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
         <p role="status" data-testid="game-has-balance" className="mt-4 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-3 text-xs text-amber-100">
           Your game still has {money2(gameBal!)}. You can add cash again when the game balance is under $1.
         </p>
+      )}
+      {gameHasBalance && others.length > 0 && (
+        <div data-testid="switch-game" className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3">
+          <p className="text-xs font-bold text-white">Want to add cash to a different game?</p>
+          <p className="mt-0.5 text-[11px] text-slate-400">Pick a game: its Add Cash screen opens right away (you will get a login first if you do not have one yet).</p>
+          <div className="mt-2.5 flex flex-wrap gap-2">
+            {others.map((g) => (
+              <Link key={g.slug} href={`/game/${g.slug}?add=1`}
+                className="inline-flex items-center gap-2 rounded-xl border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs font-bold text-sky-300 transition hover:bg-sky-400/20">
+                <GameArt game={g} className="h-6 w-6 shrink-0 rounded-md [container-type:size]" />
+                {g.name}
+              </Link>
+            ))}
+          </div>
+        </div>
       )}
 
       {state.cash_bonus && source === "wallet" && (
