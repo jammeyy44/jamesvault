@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Logo } from "./logo";
 import { brand, navLinks } from "@/lib/brand";
 import { OPEN_WALLET_EVENT } from "./wallet-panel";
+import { SignupBonusBanner } from "./signup-bonus-banner";
 
 export function Footer() {
   const openDeposit = () => {
@@ -15,6 +16,7 @@ export function Footer() {
   return (
     <footer className="mt-20 border-t border-white/10 bg-[#080B12] text-slate-300">
       <div className="container-x py-12">
+        <SignupBonusBanner />
         {/* Navigation & brand links */}
         <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr] pb-10">
           <div>
