@@ -138,3 +138,11 @@ Players write to the team from the floating headset icon; the bot posts each pla
 3. `python seed_site.py` (creates the chat tables), restart the API, then `python telegram_setup.py check` and `python telegram_setup.py webhook https://your-domain`.
 
 Without the first three values the chat icon is hidden and no alerts are sent; nothing is faked.
+
+### Chat details
+- **Ticks:** one tick = sending, two grey ticks = delivered to the team's group, two blue ticks = the team has seen it (an operator replied, or reacted to the message in Telegram).
+- **Privacy:** players only ever see "Operator 1", "Operator 2" and so on, never real names; each team member keeps the same number.
+- **Online:** shown when anyone on the team wrote or reacted in the group in the last `OPERATORS_ONLINE_MINUTES` (default 10). Telegram does not tell bots who is online, so this is based on real activity.
+- **Typing:** Telegram does not tell bots who is typing either. An operator sends `/typing` in the player's topic to show "typing..." for 15 seconds; sending the reply clears it.
+- **Attachments:** players can send photos (up to 5 MB) and videos (up to 20 MB); team photos and videos sent in a topic are shown to the player. Types are checked from the file bytes, files are stored privately and only the owner can open them.
+- After upgrading, run `python seed_site.py` and `python telegram_setup.py webhook https://your-domain` again so Telegram also sends reactions.

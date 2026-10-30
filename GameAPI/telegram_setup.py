@@ -65,7 +65,7 @@ def webhook(base):
     if not base.startswith("https://"):
         sys.exit("Telegram only accepts an https:// address.")
     url = base.rstrip("/") + "/api/v1/webhooks/telegram"
-    api("setWebhook", url=url, secret_token=SECRET, allowed_updates=["message"], drop_pending_updates=False)
+    api("setWebhook", url=url, secret_token=SECRET, allowed_updates=["message", "message_reaction"], drop_pending_updates=False)
     print("Webhook set to", url)
     info()
 

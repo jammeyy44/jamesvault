@@ -16,10 +16,15 @@ class FakeTelegram:
         self._topic = 100
         self._msg = 500
 
-    def __call__(self, token, method, payload):
+    def __call__(self, token, method, payload, files=None):
         if self.down:
             raise tg.TelegramError("Telegram unreachable (ConnectionError)")
-        self.calls.append((method, dict(payload)))
+        self.calls.append((method, {**payload, **({"_files": {k: (v[0], len(v[1]), v[2]) for k, v in files.items()}} if files else {})}))
+        if method in ("sendPhoto", "sendVideo"):
+            self._msg += 1
+            return {"message_id": self._msg}
+        if method == "getFile":
+            return {"file_path": "photos/file_1.jpg"}
         if method == "createForumTopic":
             self._topic += 1
             return {"message_thread_id": self._topic}
@@ -54,7 +59,7 @@ def _reply(api, thread, text="Hello from support", message_id=900, first="Alex",
 def test_chat_is_off_until_telegram_is_configured(api, make_player, app, monkeypatch):
     monkeypatch.setitem(app.config, "TELEGRAM_BOT_TOKEN", "")
     make_player(api)
-    assert api.get('/api/v1/chat').get_json() == {"enabled": False, "messages": [], "unread": 0}
+    assert api.get('/api/v1/chat').get_json() == {"enabled": False, "messages": [], "unread": 0, "seen_upto": 0, "online": False, "typing": False}
     assert api.post('/api/v1/chat/messages', {"text": "hi"}).status_code == 501
 
 
@@ -114,7 +119,7 @@ def test_an_operator_reply_in_the_players_topic_reaches_the_website(api, make_pl
     state = api.get('/api/v1/chat').get_json()
     assert state["unread"] == 1
     assert [m["sender"] for m in state["messages"]] == ["player", "operator"]
-    assert state["messages"][1]["body"] == "Hi! How can I help?" and state["messages"][1]["operator"] == "Alex"
+    assert state["messages"][1]["body"] == "Hi! How can I help?" and state["messages"][1]["operator"] == "Operator 1"   # never the real name
     assert api.post('/api/v1/chat/read').get_json()["unread"] == 0
     assert api.get('/api/v1/chat').get_json()["unread"] == 0
 
@@ -230,3 +235,210 @@ def test_no_alert_when_telegram_is_not_configured(app, telegram, monkeypatch):
     tg.queue_deposit_alert(db.session, ref="R4", username="u", email="e@x.io", amount_cents=100, method="Chime")
     db.session.commit()
     assert telegram.calls == []
+
+
+# ------------------------------------------------------------------ operators are anonymous
+def test_each_team_member_gets_a_stable_operator_number_and_real_names_never_reach_the_player(api, make_player, telegram):
+    make_player(api)
+    api.post('/api/v1/chat/messages', {"text": "hi"})
+    def say(uid, first, mid, text):
+        msg = {"message_id": mid, "from": {"id": uid, "is_bot": False, "first_name": first}, "chat": {"id": int(GROUP)},
+               "message_thread_id": 101, "text": text}
+        api.c.post('/api/v1/webhooks/telegram', json={"update_id": mid, "message": msg}, headers={"X-Telegram-Bot-Api-Secret-Token": SECRET})
+    say(11, "Anna Laurel", 1001, "one")
+    say(22, "Bob Builder", 1002, "two")
+    say(11, "Anna Laurel", 1003, "three")
+    raw = api.get('/api/v1/chat').get_data(as_text=True)
+    ops = [m["operator"] for m in api.get('/api/v1/chat').get_json()["messages"] if m["sender"] == "operator"]
+    assert ops == ["Operator 1", "Operator 2", "Operator 1"]
+    assert "Anna" not in raw and "Bob" not in raw and "Laurel" not in raw
+
+
+def test_an_older_message_that_stored_a_real_name_is_shown_as_plain_operator(api, make_player, telegram):
+    make_player(api)
+    api.post('/api/v1/chat/messages', {"text": "hi"})
+    chat = SupportChat.query.one()
+    db.session.add(ChatMessage(chat_id=chat.id, sender="operator", body="old", operator_name="Anna Laurel"))
+    db.session.commit()
+    last = api.get('/api/v1/chat').get_json()["messages"][-1]
+    assert last["operator"] == "Operator"
+
+
+# ------------------------------------------------------------------ online + typing
+def test_operators_show_online_only_after_the_team_was_active_recently(api, make_player, telegram, app):
+    from datetime import timedelta
+    from app.models_site import TeamActivity
+    from app.utils.auth import utcnow
+    make_player(api)
+    assert api.get('/api/v1/chat').get_json()["online"] is False
+    api.post('/api/v1/chat/messages', {"text": "hi"})
+    _reply(api, 101, "hello")                                        # a team member answers
+    assert api.get('/api/v1/chat').get_json()["online"] is True
+    TeamActivity.query.update({"last_active_at": utcnow() - timedelta(minutes=30)})
+    db.session.commit()
+    assert api.get('/api/v1/chat').get_json()["online"] is False
+
+
+def test_team_activity_anywhere_in_the_group_counts_as_online(api, make_player, telegram):
+    make_player(api)
+    msg = {"message_id": 5, "from": {"id": 3, "is_bot": False, "first_name": "Zed"}, "chat": {"id": int(GROUP)}, "text": "morning team"}
+    api.c.post('/api/v1/webhooks/telegram', json={"update_id": 1, "message": msg}, headers={"X-Telegram-Bot-Api-Secret-Token": SECRET})
+    assert api.get('/api/v1/chat').get_json()["online"] is True
+
+
+def test_a_bot_message_does_not_make_the_team_look_online(api, make_player, telegram):
+    make_player(api)
+    msg = {"message_id": 5, "from": {"id": 3, "is_bot": True, "first_name": "Bot"}, "chat": {"id": int(GROUP)}, "text": "deposit alert"}
+    api.c.post('/api/v1/webhooks/telegram', json={"update_id": 1, "message": msg}, headers={"X-Telegram-Bot-Api-Secret-Token": SECRET})
+    assert api.get('/api/v1/chat').get_json()["online"] is False
+
+
+def test_the_typing_command_shows_typing_until_the_reply_arrives(api, make_player, telegram):
+    make_player(api)
+    api.post('/api/v1/chat/messages', {"text": "hi"})
+    assert api.get('/api/v1/chat').get_json()["typing"] is False
+    assert _reply(api, 101, "/typing", message_id=970).status_code == 200
+    assert api.get('/api/v1/chat').get_json()["typing"] is True
+    assert ChatMessage.query.filter_by(sender="operator").count() == 0           # the command itself is not a chat message
+    _reply(api, 101, "Here I am", message_id=971)
+    assert api.get('/api/v1/chat').get_json()["typing"] is False
+
+
+def test_typing_expires_by_itself(api, make_player, telegram):
+    from datetime import timedelta
+    from app.utils.auth import utcnow
+    make_player(api)
+    api.post('/api/v1/chat/messages', {"text": "hi"})
+    _reply(api, 101, "/typing", message_id=972)
+    SupportChat.query.update({"typing_until": utcnow() - timedelta(seconds=1)})
+    db.session.commit()
+    assert api.get('/api/v1/chat').get_json()["typing"] is False
+
+
+# ------------------------------------------------------------------ delivery ticks: sent -> seen
+def test_a_message_is_seen_once_the_team_replies(api, make_player, telegram):
+    make_player(api)
+    first = api.post('/api/v1/chat/messages', {"text": "one"}).get_json()
+    assert api.get('/api/v1/chat').get_json()["seen_upto"] == 0
+    second = api.post('/api/v1/chat/messages', {"text": "two"}).get_json()
+    _reply(api, 101, "got both", message_id=980)
+    assert api.get('/api/v1/chat').get_json()["seen_upto"] == second["id"] >= first["id"]
+
+
+def test_a_team_reaction_marks_that_message_and_the_earlier_ones_seen(api, make_player, telegram):
+    make_player(api)
+    one = api.post('/api/v1/chat/messages', {"text": "one"}).get_json()
+    two = api.post('/api/v1/chat/messages', {"text": "two"}).get_json()
+    api.post('/api/v1/chat/messages', {"text": "three"})
+    two_tg_id = ChatMessage.query.get(two["id"]).telegram_message_id
+    reaction = {"chat": {"id": int(GROUP)}, "message_id": two_tg_id, "user": {"id": 5, "is_bot": False}, "new_reaction": [{"type": "emoji", "emoji": "👀"}]}
+    r = api.c.post('/api/v1/webhooks/telegram', json={"update_id": 9, "message_reaction": reaction}, headers={"X-Telegram-Bot-Api-Secret-Token": SECRET})
+    assert r.status_code == 200
+    assert api.get('/api/v1/chat').get_json()["seen_upto"] == two["id"]          # one and two seen, three not yet
+
+
+def test_removing_a_reaction_or_a_bot_reaction_does_not_mark_seen(api, make_player, telegram):
+    make_player(api)
+    one = api.post('/api/v1/chat/messages', {"text": "one"}).get_json()
+    tg_id = ChatMessage.query.get(one["id"]).telegram_message_id
+    for reaction in ({"chat": {"id": int(GROUP)}, "message_id": tg_id, "user": {"id": 5, "is_bot": False}, "new_reaction": []},
+                     {"chat": {"id": int(GROUP)}, "message_id": tg_id, "user": {"id": 6, "is_bot": True}, "new_reaction": [{"type": "emoji", "emoji": "👍"}]}):
+        api.c.post('/api/v1/webhooks/telegram', json={"update_id": 9, "message_reaction": reaction}, headers={"X-Telegram-Bot-Api-Secret-Token": SECRET})
+    assert api.get('/api/v1/chat').get_json()["seen_upto"] == 0
+
+
+# ------------------------------------------------------------------ attachments
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+MP4 = b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+
+def _upload(api, data, name="pic.jpg", mime="image/jpeg", caption=""):
+    import io
+    form = {"file": (io.BytesIO(data), name, mime)}
+    if caption:
+        form["caption"] = caption
+    return api.c.post('/api/v1/chat/attachments', data=form, content_type="multipart/form-data", headers={"X-CSRF-Token": api.token})
+
+
+def test_a_photo_is_posted_into_the_topic_and_shown_back_to_the_player(api, make_player, telegram):
+    make_player(api)
+    r = _upload(api, JPEG, caption="my receipt")
+    assert r.status_code == 201, r.get_json()
+    body = r.get_json()
+    assert body["kind"] == "photo" and body["body"] == "my receipt" and body["file"].startswith("/api/v1/chat/files/")
+    method, payload = next((m, p) for m, p in telegram.calls if m == "sendPhoto")
+    assert payload["message_thread_id"] == 101 and payload["_files"]["photo"][2] == "image/jpeg" and "my receipt" in payload["caption"]
+    shown = api.get(body["file"])
+    assert shown.status_code == 200 and shown.mimetype == "image/jpeg" and shown.data == JPEG
+
+
+def test_a_video_goes_out_as_a_video(api, make_player, telegram):
+    make_player(api)
+    r = _upload(api, MP4, name="clip.mp4", mime="video/mp4")
+    assert r.status_code == 201 and r.get_json()["kind"] == "video"
+    assert any(m == "sendVideo" for m, _ in telegram.calls)
+
+
+def test_the_file_type_is_judged_by_its_bytes_not_its_name(api, make_player, telegram):
+    make_player(api)
+    r = _upload(api, b"<html><script>alert(1)</script></html>", name="evil.jpg", mime="image/jpeg")
+    assert r.status_code == 400 and not any(m in ("sendPhoto", "sendVideo") for m, _ in telegram.calls)
+    assert _upload(api, b"%PDF-1.4 fake", name="doc.pdf", mime="application/pdf").status_code == 400
+
+
+def test_oversized_attachments_are_refused(api, make_player, telegram):
+    from app.services import chat_media
+    make_player(api)
+    big_photo = JPEG + b"\x00" * chat_media.PHOTO_MAX
+    assert _upload(api, big_photo).status_code == 413
+    assert not any(m == "sendPhoto" for m, _ in telegram.calls)
+
+
+def test_a_chat_file_is_private_to_its_owner(api, make_player, telegram):
+    make_player(api)
+    url = _upload(api, PNG, name="a.png", mime="image/png").get_json()["file"]
+    api.post('/api/v1/auth/logout')
+    assert api.get(url).status_code == 401
+    make_player(api, "player_two", "p2@example.com")
+    assert api.get(url).status_code == 404                     # another player cannot read it
+
+
+def test_attachment_upload_needs_telegram_and_login(api, make_player, telegram, app, monkeypatch):
+    assert _upload(api, JPEG).status_code == 401
+    make_player(api)
+    monkeypatch.setitem(app.config, "TELEGRAM_BOT_TOKEN", "")
+    assert _upload(api, JPEG).status_code == 501
+
+
+def test_an_undelivered_attachment_is_not_stored(api, make_player, telegram):
+    make_player(api)
+    telegram.down = True
+    assert _upload(api, JPEG).status_code == 502
+    assert ChatMessage.query.count() == 0
+
+
+def test_a_photo_from_the_team_is_downloaded_and_shown(api, make_player, telegram, monkeypatch):
+    make_player(api)
+    api.post('/api/v1/chat/messages', {"text": "hi"})
+    monkeypatch.setattr(tg, "_download", lambda token, path, max_bytes: JPEG)
+    r = _reply(api, 101, text="", message_id=990, caption="here is the guide", photo=[{"file_id": "small"}, {"file_id": "big", "file_size": 1000}])
+    assert r.status_code == 200
+    last = api.get('/api/v1/chat').get_json()["messages"][-1]
+    assert last["kind"] == "photo" and last["operator"] == "Operator 1" and last["file"]
+    assert api.get(last["file"]).data == JPEG
+
+
+def test_an_unusable_team_attachment_falls_back_to_a_note(api, make_player, telegram, monkeypatch):
+    make_player(api)
+    api.post('/api/v1/chat/messages', {"text": "hi"})
+    monkeypatch.setattr(tg, "_download", lambda token, path, max_bytes: b"not an image at all")
+    _reply(api, 101, text="", message_id=991, photo=[{"file_id": "big"}])
+    last = api.get('/api/v1/chat').get_json()["messages"][-1]
+    assert last["kind"] == "text" and "attachment" in last["body"] and last["file"] is None
+
+
+def test_big_bodies_are_refused_everywhere_except_the_attachment_route(api, make_player, telegram):
+    make_player(api)
+    r = api.c.post('/api/v1/chat/messages', data=b"x" * (4 * 1024 * 1024), content_type="application/json", headers={"X-CSRF-Token": api.token})
+    assert r.status_code == 413

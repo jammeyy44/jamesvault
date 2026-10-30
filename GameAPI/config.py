@@ -31,7 +31,9 @@ class Config:
     JV_ENV = JV_ENV
     # Uploaded game thumbnails live here (use a persistent volume in production). Requests are capped to keep uploads small.
     UPLOAD_DIR = os.getenv("UPLOAD_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "uploads"))
-    MAX_CONTENT_LENGTH = 4 * 1024 * 1024
+    # Largest request body Flask accepts. Only the chat attachment route may exceed 3 MB (see create_app); it enforces
+    # its own limits (5 MB photos, 20 MB videos).
+    MAX_CONTENT_LENGTH = 21 * 1024 * 1024 + 1024 * 1024
     # Only ever turned off for automated browser tests (refused in production).
     RATE_LIMITS_ENABLED = _flag("JV_RATE_LIMITS", True)
 
@@ -71,6 +73,7 @@ class Config:
     TELEGRAM_GROUP_ID = os.getenv("TELEGRAM_GROUP_ID", "")
     TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
     TELEGRAM_DEPOSIT_TOPIC_ID = os.getenv("TELEGRAM_DEPOSIT_TOPIC_ID", "")
+    OPERATORS_ONLINE_MINUTES = int(os.getenv("OPERATORS_ONLINE_MINUTES", 10))  # "online" = team active in the group this recently
     # Number of reverse proxies in front of Flask that append to X-Forwarded-For (0 = use the socket address).
     TRUSTED_PROXY_COUNT = int(os.getenv("TRUSTED_PROXY_COUNT", 0))
     SANDBOX_WELCOME_DIAMONDS = 30  # test diamonds for new accounts, ONLY when JV_SANDBOX is on (never in production)

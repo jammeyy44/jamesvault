@@ -685,6 +685,7 @@ class SupportChat(db.Model):
     player_id = db.Column(db.Integer, db.ForeignKey('players.id'), unique=True, nullable=False)
     telegram_topic_id = db.Column(db.BigInteger, unique=True, nullable=True)
     player_read_id = db.Column(db.Integer, nullable=False, default=0, server_default='0')  # last operator message the player has seen
+    typing_until = db.Column(db.DateTime, nullable=True)  # an operator sent /typing in the topic: show "typing..." until then
     last_player_message_at = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
 
@@ -698,5 +699,25 @@ class ChatMessage(db.Model):
     sender = db.Column(db.String(10), nullable=False)  # player | operator
     body = db.Column(db.Text, nullable=False)
     operator_name = db.Column(db.String(60), nullable=True)
+    kind = db.Column(db.String(10), nullable=False, default='text', server_default='text')  # text | photo | video
+    file_name = db.Column(db.String(80), nullable=True)   # stored file (random name); body then holds the caption, possibly empty
+    seen_at = db.Column(db.DateTime, nullable=True)       # player messages: when the team saw it (replied or reacted)
     telegram_message_id = db.Column(db.BigInteger, nullable=True)  # lets a re-delivered webhook be ignored
     created_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+class TeamActivity(db.Model):
+    """One row: when anyone on the support team last did something in the Telegram group. Drives the 'operators online' dot."""
+    __tablename__ = 'team_activity'
+
+    id = db.Column(db.Integer, primary_key=True)
+    last_active_at = db.Column(db.DateTime, nullable=False, default=utcnow)
+
+
+class OperatorAlias(db.Model):
+    """A stable 'Operator N' name for each team member, so players never see real names."""
+    __tablename__ = 'operator_aliases'
+
+    id = db.Column(db.Integer, primary_key=True)
+    telegram_user_id = db.Column(db.BigInteger, unique=True, nullable=False)
+    number = db.Column(db.Integer, unique=True, nullable=False)

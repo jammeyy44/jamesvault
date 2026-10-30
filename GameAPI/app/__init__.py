@@ -141,6 +141,13 @@ def create_app(config_class: type = Config) -> Flask:
             response.headers['Content-Security-Policy'] = "default-src 'none'; frame-ancestors 'none'"
         return response
 
+    @app.before_request
+    def limit_body_size():
+        """Only the chat attachment route may receive a large body; everything else is capped at 3 MB."""
+        from app.services.chat_media import LARGE_UPLOAD_PATH
+        if request.content_length and request.content_length > 3 * 1024 * 1024 and request.path != LARGE_UPLOAD_PATH:
+            return {'error': 'That request is too large.'}, 413
+
     # Request logging
     @app.before_request
     def log_request_info():

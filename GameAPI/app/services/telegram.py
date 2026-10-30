@@ -44,10 +44,14 @@ def group_id() -> str:
     return _cfg("TELEGRAM_GROUP_ID")
 
 
-def _post(token, method, payload):
-    """One Bot API call. Raises TelegramError with Telegram's own description. (Tests replace this function.)"""
+def _post(token, method, payload, files=None):
+    """One Bot API call (multipart when `files` is given). Raises TelegramError with Telegram's own description.
+    (Tests replace this function.)"""
     try:
-        resp = requests.post(API.format(token=token, method=method), json=payload, timeout=TIMEOUT)
+        if files:
+            resp = requests.post(API.format(token=token, method=method), data=payload, files=files, timeout=60)
+        else:
+            resp = requests.post(API.format(token=token, method=method), json=payload, timeout=TIMEOUT)
         body = resp.json()
     except (requests.RequestException, ValueError) as e:
         raise TelegramError(f"Telegram unreachable ({type(e).__name__})") from e
@@ -72,6 +76,42 @@ def send(text: str, thread_id=None, html_mode=True):
     if html_mode:
         payload["parse_mode"] = "HTML"
     return call("sendMessage", payload)
+
+
+def send_media(kind, data: bytes, filename: str, mime: str, caption="", thread_id=None):
+    """Post a photo or video into a topic."""
+    method, field = ("sendPhoto", "photo") if kind == "photo" else ("sendVideo", "video")
+    payload = {"chat_id": group_id()}
+    if thread_id:
+        payload["message_thread_id"] = int(thread_id)
+    if caption:
+        payload["caption"] = caption[:1000]
+        payload["parse_mode"] = "HTML"
+    if kind == "video":
+        payload["supports_streaming"] = "true"
+    return _post(_cfg("TELEGRAM_BOT_TOKEN"), method, payload, files={field: (filename, data, mime)})
+
+
+def _download(token, file_path, max_bytes):
+    """Fetch a file Telegram holds for the bot, refusing anything larger than max_bytes. (Tests replace this function.)"""
+    try:
+        with requests.get(f"https://api.telegram.org/file/bot{token}/{file_path}", stream=True, timeout=30) as resp:
+            if resp.status_code != 200:
+                raise TelegramError(f"download failed (HTTP {resp.status_code})")
+            data = bytearray()
+            for chunk in resp.iter_content(65536):
+                data.extend(chunk)
+                if len(data) > max_bytes:
+                    raise TelegramError("file too large")
+            return bytes(data)
+    except requests.RequestException as e:
+        raise TelegramError(f"download failed ({type(e).__name__})") from e
+
+
+def fetch_file(file_id: str, max_bytes: int) -> bytes:
+    """Download a photo/video someone posted in the group (Bot API allows up to 20 MB)."""
+    info = call("getFile", {"file_id": file_id})
+    return _download(_cfg("TELEGRAM_BOT_TOKEN"), info["file_path"], max_bytes)
 
 
 def esc(value) -> str:
