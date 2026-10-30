@@ -142,7 +142,7 @@ function Poster({ diamonds, bonusBalance, streakDays }: { diamonds: number | nul
           className="mb-1.5 sm:mb-2 inline-flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/20 px-2.5 py-0.5 text-[9px] sm:text-xs font-black uppercase tracking-wider text-violet-300 backdrop-blur-md w-fit"
         >
           <Crown className="h-3 w-3 text-amber-400" />
-          <span>VIP REWARDS VAULT</span>
+          <span>REWARDS VAULT</span>
         </motion.div>
 
         <h1 className="text-base xs:text-lg sm:text-2xl md:text-3xl lg:text-4xl font-black text-white leading-[1.08] tracking-tight drop-shadow-md">
@@ -547,7 +547,7 @@ function SignedOutView() {
             href="/register"
             className="inline-flex h-12 items-center rounded-2xl bg-gradient-to-r from-[#7c3aed] via-[#6366f1] to-[#38bdf8] px-8 text-sm font-black text-white shadow-[0_4px_20px_rgba(124,58,237,0.45)] transition hover:scale-105 active:scale-95"
           >
-            Create VIP Account
+            Create Account
           </Link>
           <Link
             href="/login"

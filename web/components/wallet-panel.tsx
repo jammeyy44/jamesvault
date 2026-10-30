@@ -1,5 +1,6 @@
 "use client";
 
+import { PaymentIcon } from "./payment-icon";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowDownToLine, ArrowUpFromLine, FlaskConical, Pencil, Trash2, Wallet as WalletIcon, X } from "lucide-react";
@@ -36,7 +37,6 @@ const TONES: Record<string, string> = {
   green: "bg-emerald-400/15 text-emerald-300", amber: "bg-amber-400/20 text-amber-300",
   red: "bg-red-400/15 text-red-300", blue: "bg-electric/20 text-electric",
 };
-const COLORS = ["#2864F0", "#4F46E5", "#16A34A", "#0EA5E9", "#9333EA", "#EA580C"];
 const STATUS_LABEL: Record<string, string> = {
   pending: "Awaiting payment", paid: "Paid", failed: "Failed", refunded: "Refunded", pending_review: "In review",
   sending: "Sending", submitted: "Sent for payout", completed: "Completed", cancelled: "Cancelled", rejected: "Rejected",
@@ -49,12 +49,11 @@ const KIND_LABEL: Record<string, string> = {
 };
 
 function Tile({ m, active, onClick }: { m: Method; active: boolean; onClick: () => void }) {
-  const color = COLORS[[...m.value].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
   return (
     <button onClick={onClick} aria-pressed={active} aria-label={m.name}
-      className={cn("relative rounded-2xl border p-4 text-left transition", active ? "border-electric bg-white/10" : "border-white/5 bg-white/5 hover:bg-white/10")}>
+      className={cn("relative rounded-2xl border p-4 text-left transition hover:-translate-y-0.5 active:scale-[0.98]", active ? "border-electric bg-gradient-to-b from-white/[0.12] to-white/[0.06] shadow-[0_8px_24px_rgba(56,189,248,0.18)]" : "border-white/[0.06] bg-gradient-to-b from-white/[0.07] to-white/[0.03] hover:from-white/[0.1] hover:to-white/[0.05]")}>
       {m.badge && <span className={cn("absolute right-3 top-3 rounded-full px-2 py-0.5 text-[0.65rem] font-bold", TONES[m.badge_tone ?? "green"] ?? TONES.green)}>{m.badge}</span>}
-      <span className="grid h-11 w-11 place-items-center rounded-full text-lg font-black text-white" style={{ background: color }}>{m.name[0]}</span>
+      <PaymentIcon value={m.value} name={m.name} />
       <span className="mt-5 block text-sm font-bold">{m.name}</span>
     </button>
   );

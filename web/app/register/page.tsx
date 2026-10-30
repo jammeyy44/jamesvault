@@ -68,7 +68,7 @@ function RegisterForm() {
 
   return (
     <AuthShell
-      title="Create VIP Account"
+      title="Create Account"
       subtitle="Join thousands of players and claim your first mystery crate."
       badge="Instant Registration"
       footer={
@@ -172,7 +172,7 @@ function RegisterForm() {
               </>
             ) : (
               <>
-                <span>Create VIP Account</span>
+                <span>Create Account</span>
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
               </>
             )}

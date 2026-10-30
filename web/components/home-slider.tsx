@@ -89,7 +89,7 @@ export function HomeSlider() {
               <div className="relative z-20 w-[60%] sm:w-[58%] lg:w-[62%] max-w-2xl pb-2 sm:pb-4">
                 <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/15 border border-amber-400/30 px-2.5 py-0.5 text-[9px] sm:text-xs font-black text-amber-300 backdrop-blur-md mb-1.5 sm:mb-2 w-fit">
                   <Sparkles className="h-3 w-3 text-amber-300" />
-                  <span>VIP WELCOME PASS</span>
+                  <span>WELCOME PASS</span>
                 </div>
 
                 <h1 className="text-base xs:text-lg sm:text-2xl md:text-3xl lg:text-[2.25rem] xl:text-4xl font-black text-white leading-[1.12] tracking-tight drop-shadow-md">
@@ -139,7 +139,7 @@ export function HomeSlider() {
                   <source srcSet="/images/hero_model_blonde.webp" type="image/webp" />
                   <img
                     src="/images/hero_model_blonde.png"
-                    alt="VIP Welcome Pass"
+                    alt="Welcome Pass"
                     loading="eager"
                     fetchPriority="high"
                     decoding="async"

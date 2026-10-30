@@ -62,7 +62,7 @@ export default function LoginPage() {
     <AuthShell
       title="Welcome Back"
       subtitle="Sign in to continue your streak & unlock vault rewards."
-      badge="VIP Portal"
+      badge="Member Portal"
       footer={
         <div className="space-y-2">
           <p>

@@ -212,7 +212,7 @@ export function SideDrawer({ open, onClose, balance }: SideDrawerProps) {
                   active={isActive("/bonus-zone")}
                   onClick={onClose}
                 />
-                <DrawerItem href="/bonus-zone" icon={<Crown className="h-5 w-5 text-amber-400" />} label="VIP Club" active={false} onClick={onClose} />
+                <DrawerItem href="/bonus-zone" icon={<Crown className="h-5 w-5 text-amber-400" />} label="Rewards" active={false} onClick={onClose} />
                 <DrawerItem
                   href="/refer"
                   icon={<Users className="h-5 w-5 text-emerald-400" />}
