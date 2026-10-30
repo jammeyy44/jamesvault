@@ -163,6 +163,10 @@ def withdrawal_text(order, player, handled_by=None) -> str:
     if order.chime_name:
         lines.append(f"🙍 Name on account: {esc(order.chime_name)}")
     lines.append(f"📊 Status: {esc(WD_HEADLINE.get(order.status, order.status))}")
+    if order.reference_id and order.status != "pending_review":
+        lines.append(f"🔗 Paydora ref: {esc(order.reference_id)}")
+    if order.note and order.status in ("failed", "needs_review", "failed_at_provider"):
+        lines.append(f"📝 {esc(order.note)}")
     if handled_by and order.status != "pending_review":
         lines.append(f"🧑\u200d💼 By: {esc(handled_by)}")
     if order.sandbox:

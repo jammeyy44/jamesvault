@@ -35,9 +35,10 @@ PAYOUT_FIELDS = {"cashapp": "cashtag", "chime": "Chime tag", "zelle": "phone or 
 class PaymentError(Exception):
     """Message is safe to show to players."""
 
-    def __init__(self, message, definitive=False):
+    def __init__(self, message, definitive=False, detail=None):
         super().__init__(message)
         self.definitive = definitive
+        self.detail = detail  # the provider's own HTTP status / message: for staff and logs, never for players
 
 
 def normalize_value(value: str) -> str:
@@ -72,12 +73,13 @@ class PaydoraClient:
             return body
         provider_msg = (body.get("message") if isinstance(body, dict) else None) or ""
         logger.warning("payment provider %s %s -> %s %s", method, path, r.status_code, provider_msg[:200])
+        detail = f"HTTP {r.status_code}: {provider_msg[:160]}".strip()
         if r.status_code in (400, 404, 422):
             # Validation-type refusals are safe to show (e.g. accepted amounts); nothing was created.
-            raise PaymentError(provider_msg[:300] or "The payment was not accepted.", definitive=True)
+            raise PaymentError(provider_msg[:300] or "The payment was not accepted.", definitive=True, detail=detail)
         if r.status_code in (401, 403):
-            raise PaymentError("The payment service is not available right now.", definitive=True)
-        raise PaymentError("The payment service is busy. Please try again in a moment.")  # 409/429/5xx: unknown
+            raise PaymentError("The payment service is not available right now.", definitive=True, detail=detail)
+        raise PaymentError("The payment service is busy. Please try again in a moment.", detail=detail)  # 409/429/5xx: unknown
 
     def methods(self):
         data = self._request("GET", "/payment-methods")
@@ -95,6 +97,9 @@ class PaydoraClient:
 
     def get_deposit(self, deposit_id):
         return self._request("GET", f"/deposits/{deposit_id}")
+
+    def get_withdrawal(self, withdrawal_id):
+        return self._request("GET", f"/withdrawals/{withdrawal_id}")
 
     def create_withdrawal(self, *, method_id, amount, address, user_name, chime_name, idempotency_key):
         body = {"paymentMethodId": method_id, "amount": float(amount), "address": address, "userName": user_name}
@@ -130,17 +135,22 @@ class SandboxPayments:
 
 
 def payments_mode():
-    f = current_app.config["FEATURES"]
+    """live (a real Paydora key is set), sandbox (no key AND JV_SANDBOX is on: development only) or disabled.
+    A missing or mistyped key can never silently turn a real site into a fake-payments one."""
+    cfg = current_app.config
+    f = cfg["FEATURES"]
     if not f.get("wallet"):
         return "disabled"
-    return "live"
+    if cfg.get("PAYDORA_API_KEY"):
+        return "live"
+    return "sandbox" if f.get("sandbox") else "disabled"
 
 
 def get_payments():
     mode = payments_mode()
     if mode == "disabled":
         return None
-    if current_app.config.get("PAYDORA_API_KEY"):
+    if mode == "live":
         return PaydoraClient()
     return SandboxPayments()
 

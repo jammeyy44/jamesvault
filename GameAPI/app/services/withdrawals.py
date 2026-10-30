@@ -6,11 +6,16 @@ Money safety (unchanged from the original admin flow):
   * the payout is requested at the provider (Paydora) with the idempotency key jv-wd-<id>;
   * a definite refusal refunds the held funds; an unclear outcome keeps them held for a person to reconcile (never retried blindly).
 """
+import logging
+
 from app import db
 from app.models_site import Notification, Player, WithdrawalOrder
 from app.services import telegram as tg, wallet as ledger
 from app.services.payments import PaymentError, get_payments
 from app.utils.auth import audit, utcnow
+
+
+logger = logging.getLogger("jamesvault.withdrawals")
 
 
 def _claim(order_id, from_status, to_status):
@@ -55,17 +60,21 @@ def approve(wid, actor_type=None, actor_id=None, handled_by=None):
                                           chime_name=order.chime_name, idempotency_key=f"jv-wd-{order.id}")
         order.provider_withdrawal_id = resp.get("id")
         order.reference_id = resp.get("referenceId")
+        logger.info("cashout %s sent to %s: provider id %s, reference %s", wid, getattr(payments, "name", "?"), order.provider_withdrawal_id, order.reference_id)
         order.status = 'completed' if order.sandbox else 'submitted'
         if order.sandbox:
             order.processed_at = utcnow()
     except PaymentError as e:
+        why = f"{e} ({e.detail})" if getattr(e, "detail", None) else str(e)
+        logger.warning("cashout %s was not accepted by the payment provider: %s", wid, why)
         if e.definitive:  # the provider refused it: nothing was sent, give the money back
-            order.status, order.note = 'failed', str(e)[:300]
-            _refund(wid, 'failed', str(e)[:300])
+            order.status, order.note = 'failed', why[:300]
+            _refund(wid, 'failed', why[:300])
         else:  # unknown outcome: keep the funds held and reconcile by hand; never retry blindly
             order.status = 'needs_review'
-            order.note = "Provider outcome unknown. Check the provider dashboard, then resolve by hand."
+            order.note = f"Provider outcome unknown ({e.detail or 'no answer'}). Check the provider dashboard, then resolve by hand."[:300]
     except Exception:
+        logger.exception("cashout %s: unexpected error while asking the payment provider", wid)
         order.status = 'needs_review'
         order.note = "Provider outcome unknown. Check the provider dashboard, then resolve by hand."
     audit("withdrawal.approve", target=str(wid), detail={"result": order.status}, actor_type=actor_type, actor_id=actor_id)

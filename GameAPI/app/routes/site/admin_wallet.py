@@ -38,7 +38,7 @@ def admin_withdrawals():
     names = _names(r.player_id for r in rows)
     return jsonify({"items": [{
         "id": r.id, "player": names.get(r.player_id), "method": r.method_name, "amount": ledger.fmt(r.amount_cents),
-        "destination": r.address_enc, "chime_name": r.chime_name, "status": r.status, "sandbox": r.sandbox,
+        "destination": r.address_enc, "chime_name": r.chime_name, "status": r.status, "sandbox": r.sandbox, "reference": r.reference_id,
         "note": r.note, "created_at": iso(r.created_at)} for r in rows]})
 
 

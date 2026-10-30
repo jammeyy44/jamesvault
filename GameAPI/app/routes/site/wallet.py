@@ -79,6 +79,8 @@ def wallet():
     if mode == "disabled":
         base.update(balance=None, transactions=[], reason="Deposits and withdrawals are not available yet.")
         return jsonify(base)
+    if mode == "sandbox":
+        base["sandbox_notice"] = "Sandbox mode: deposits and cashouts are test data stored locally. No real money moves."
     base["balance"] = ledger.fmt(player.wallet_cents)  # always read fresh from the database
     base["bonus_balance"] = ledger.fmt(player.bonus_cents)
     dep = cashout_rules.latest_deposit(player.id)
