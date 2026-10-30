@@ -34,6 +34,34 @@ TABLE = [
 NOTE = "Winning amount above the maximum is voided by the system."
 
 
+# Bonus cashout rule. It applies to a game funded ONLY by bonus (no cash added since the last cash out): the game balance must be
+# at least $60 to cash out, and the wallet is credited a fixed amount by band. The rest of the balance is not carried over.
+#     BALANCE      CREDITED TO WALLET
+#     $60 - $90    $10
+#     $91+         $20
+BONUS_TIERS = ((9100, 2000), (6000, 1000))   # (balance in cents at least, credit in cents), highest first
+BONUS_MIN_CENTS = BONUS_TIERS[-1][0]
+BONUS_TABLE = [
+    {"made": "$60 - $90", "wallet": "$10"},
+    {"made": "$91+", "wallet": "$20"},
+]
+BONUS_NOTE = "Bonus winnings convert to a fixed wallet credit. The rest of the balance is not carried over."
+
+
+def bonus_credit(balance_cents: int) -> int:
+    """Wallet credit (cents) for a bonus-funded game balance; 0 below the minimum."""
+    for need, credit in BONUS_TIERS:
+        if balance_cents >= need:
+            return credit
+    return 0
+
+
+def bonus_limits(balance_cents: int) -> dict:
+    """A rule dict shaped like limits(): the credit is the 'maximum', so outcome() pays it and voids (does not carry over) the rest."""
+    credit = bonus_credit(balance_cents)
+    return {"row": None, "deposit_cents": 0, "min_cents": BONUS_MIN_CENTS, "max_cents": credit}
+
+
 def row_index(deposit_cents: int):
     d = deposit_cents
     if d < 500:
@@ -92,6 +120,16 @@ class GameDepositRecord:
         self.created_at = created_at
 
 
+def latest_bonus_added(player_id, game_account_id):
+    """The most recent completed Add Cash paid from bonus into this game (locks one bonus cash out per bonus added)."""
+    from app.models_site import CashRequest
+    from app.services import wallet as ledger
+
+    req = (CashRequest.query.filter_by(player_id=player_id, game_account_id=game_account_id, status='completed', source='bonus')
+           .order_by(CashRequest.processed_at.desc(), CashRequest.id.desc()).first())
+    return GameDepositRecord(req.id, ledger.to_cents(req.amount), req.created_at) if req else None
+
+
 def latest_game_deposit(player_id, game_account_id):
     """The cash the player most recently added TO THIS GAME (a completed Add Cash that was not paid from bonus).
 
@@ -102,7 +140,7 @@ def latest_game_deposit(player_id, game_account_id):
 
     req = (CashRequest.query
            .filter_by(player_id=player_id, game_account_id=game_account_id, status='completed')
-           .filter(CashRequest.source != 'bonus')
+           .filter(CashRequest.source == 'wallet')
            .order_by(CashRequest.processed_at.desc(), CashRequest.id.desc()).first())
     if req is None:
         return None

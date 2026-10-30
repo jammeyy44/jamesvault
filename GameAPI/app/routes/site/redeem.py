@@ -52,7 +52,7 @@ def _added_to_game(acct):
     for r in q:
         if r.source == 'bonus':
             bonus += Decimal(r.amount)
-        else:
+        elif r.source == 'wallet':   # only real cash counts ('win' rows are sandbox test winnings, not money added)
             cash += Decimal(r.amount)
     session = "Cash + Bonus" if cash and bonus else "Bonus" if bonus else "Cash"
     return {"cash": f"{cash:.2f}", "bonus": f"{bonus:.2f}", "session": session}
@@ -63,7 +63,8 @@ def _preview(player, game, acct):
     out = {"game": game.name, "table": rules.TABLE, "note": rules.NOTE, "sandbox": _mode() == "sandbox",
            "latest_deposit": None, "rule": None, "game_balance": None, "payout": None, "voided": None,
            "can_redeem": False, "needs_confirm": False, "reason": None, "_dep": None, "_rule": None, "_balance": None,
-           "added": _added_to_game(acct)}
+           "added": _added_to_game(acct), "mode": "cash",
+           "bonus_rule": {"table": rules.BONUS_TABLE, "min": ledger.fmt(rules.BONUS_MIN_CENTS), "note": rules.BONUS_NOTE}}
     gateway = get_gateway()
     if gateway is None:
         out["reason"] = "Redeeming is not available yet."
@@ -71,12 +72,20 @@ def _preview(player, game, acct):
     if _provider_off(game):
         out["reason"] = "This game is temporarily unavailable. Please try again later."
         return out
-    dep = rules.latest_game_deposit(player.id, acct.id)
-    rule = rules.limits(dep.amount_cents) if dep else None
+    added = out["added"]
+    bonus_only = Decimal(added["cash"]) == 0 and Decimal(added["bonus"]) > 0   # since the last cash out, only bonus went in
+    out["mode"] = "bonus" if bonus_only else "cash"
+    out["bonus_rule"] = {"table": rules.BONUS_TABLE, "min": ledger.fmt(rules.BONUS_MIN_CENTS), "note": rules.BONUS_NOTE}
+    if bonus_only:
+        dep = rules.latest_bonus_added(player.id, acct.id)
+        rule = rules.bonus_limits(0)  # real band chosen once the balance is known (below)
+    else:
+        dep = rules.latest_game_deposit(player.id, acct.id)
+        rule = rules.limits(dep.amount_cents) if dep else None
     if dep is None or rule is None:
         out["reason"] = "Add $5 or more of your own cash to this game to unlock cashing out. The cash you add (bonus does not count) sets your cashout range."
         return out
-    out.update(latest_deposit=ledger.fmt(dep.amount_cents), rule=_rule_view(rule), _dep=dep, _rule=rule)
+    out.update(latest_deposit=ledger.fmt(dep.amount_cents), _dep=dep)
     try:
         bal = ledger.to_cents(gateway.get_balance(acct))
     except GatewayError as e:
@@ -86,13 +95,20 @@ def _preview(player, game, acct):
         logger.exception("could not read the game balance for redeem")
         out["reason"] = "We couldn't read your game balance right now. Please try again."
         return out
+    if bonus_only:
+        rule = rules.bonus_limits(bal)
+    out.update(rule=None if bonus_only else _rule_view(rule), _rule=rule)
     out.update(game_balance=ledger.fmt(bal), _balance=bal)
     if RedeemRequest.query.filter_by(deposit_lock_id=dep.id).first():
         out["reason"] = "You've already cashed out for the latest cash you added to this game. Add cash to this game to cash out again."
         return out
     if bal < rule["min_cents"]:
-        out["reason"] = (f"You need at least ${ledger.fmt(rule['min_cents'])} in this game to redeem (set by your latest "
-                         f"cash added to this game of ${ledger.fmt(dep.amount_cents)}). Your game balance is ${ledger.fmt(bal)}.")
+        if bonus_only:
+            out["reason"] = (f"Bonus winnings can be cashed out from ${ledger.fmt(rules.BONUS_MIN_CENTS)}. "
+                             f"Your game balance is ${ledger.fmt(bal)}.")
+        else:
+            out["reason"] = (f"You need at least ${ledger.fmt(rule['min_cents'])} in this game to redeem (set by your latest "
+                             f"cash added to this game of ${ledger.fmt(dep.amount_cents)}). Your game balance is ${ledger.fmt(bal)}.")
         return out
     payout, voided = rules.outcome(bal, rule)
     out.update(payout=ledger.fmt(payout), voided=ledger.fmt(voided), can_redeem=True, needs_confirm=voided > 0)
@@ -136,7 +152,8 @@ def redeem(slug):
     if not pre["can_redeem"]:
         return json_error(pre["reason"] or "You can't redeem right now.", 409, code="not_redeemable")
     if pre["needs_confirm"] and data.get('confirm_void') is not True:
-        return json_error(f"${pre['voided']} above your maximum will be voided. Confirm to continue.", 409,
+        what = "of your bonus winnings will not be carried over" if pre["mode"] == "bonus" else "above your maximum will be voided"
+        return json_error(f"${pre['voided']} {what}. Confirm to continue.", 409,
                           code="confirm_void", payout=pre["payout"], voided=pre["voided"])
 
     dep, rule, bal = pre["_dep"], pre["_rule"], pre["_balance"]
@@ -171,7 +188,8 @@ def redeem(slug):
 
     ledger.credit(player.id, payout, 'redeem', 'redeem_request', rr.id)
     rr.status, rr.processed_at = 'completed', utcnow()
-    rr.note = (f"${ledger.fmt(voided)} above the maximum was voided." if voided else None)
+    rr.note = ((f"Bonus rule: ${ledger.fmt(voided)} was not carried over." if pre["mode"] == "bonus"
+                else f"${ledger.fmt(voided)} above the maximum was voided.") if voided else None)
     db.session.add(Notification(player_id=player.id, title="Winnings redeemed",
                                 body=f"${ledger.fmt(payout)} was added to your wallet from {game.name}."
                                      + (f" ${ledger.fmt(voided)} above your maximum was voided." if voided else "")))
@@ -206,6 +224,7 @@ def cashout_rules_public():
     """The cashout table and the headline limits, for the 'Cashout limits' popup. No account or provider call needed."""
     return jsonify({
         "table": rules.TABLE, "note": rules.NOTE,
+        "bonus": {"table": rules.BONUS_TABLE, "note": rules.BONUS_NOTE, "min": "$" + str(rules.BONUS_MIN_CENTS // 100)},
         "facts": {
             "min_deposit": "$" + format(current_app.config["DEPOSIT_MIN"].normalize(), "f"),
             "max_redeem": f"${rules.CAP_CENTS // 100}",

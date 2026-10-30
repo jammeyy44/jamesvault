@@ -31,7 +31,7 @@ type Access = {
 };
 
 type CashResult = { status: string; sandbox: boolean; amount: string; note: string | null; source?: "wallet" | "bonus" };
-type LimitsInfo = { table: { deposit: string; min: string; max: string }[]; note: string; facts: { min_deposit: string; max_redeem: string; min_wallet_cashout: string } };
+type LimitsInfo = { table: { deposit: string; min: string; max: string }[]; note: string; bonus?: { table: { made: string; wallet: string }[]; note: string; min: string }; facts: { min_deposit: string; max_redeem: string; min_wallet_cashout: string } };
 
 /** Shown once, right after a login is created: the cashout rules, straight from the server's table. */
 function CashoutLimitsModal({ onDone }: { onDone: () => void }) {
@@ -82,6 +82,21 @@ function CashoutLimitsModal({ onDone }: { onDone: () => void }) {
               ))}
             </div>
 
+            {info.bonus && (
+              <div className="mt-4 rounded-2xl border border-[#ffd966]/30 bg-[#ffd966]/10 p-3.5 text-sm text-[#ffd966]" data-testid="limits-bonus">
+                <p className="font-bold">Bonus balance rule</p>
+                <p className="mt-1 text-xs text-[#ffd966]/90">If you play with bonus only, your game balance must reach {info.bonus.min} to cash out:</p>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {info.bonus.table.map((t) => (
+                    <div key={t.made} className="rounded-xl bg-black/20 px-3 py-2 text-center">
+                      <p className="text-[11px] text-[#ffd966]/70">{t.made}</p>
+                      <p className="text-base font-extrabold text-emerald-300">{t.wallet} to wallet</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-sm font-semibold text-amber-300">
               <Info className="mt-0.5 h-4 w-4 shrink-0" />
               <span>NOTE: {info.note.replace(/^Winning amount/i, "winning").replace(/\.$/, "")}.</span>
@@ -101,6 +116,8 @@ type RedeemPreview = {
   rule: { row: number; deposit: string; min: string; max: string } | null; game_balance: string | null; payout: string | null;
   voided: string | null; can_redeem: boolean; needs_confirm: boolean; reason: string | null;
   added?: { cash: string; bonus: string; session: string };
+  mode?: "cash" | "bonus";
+  bonus_rule?: { table: { made: string; wallet: string }[]; min: string; note: string };
 };
 type RedeemResult = { status: string; payout: string; voided: string; note: string | null };
 
@@ -750,7 +767,9 @@ function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: ()
   };
 
   const bal = p?.game_balance != null ? Number(p.game_balance) : null;
-  const belowMin = !!p && !p.can_redeem && !!p.rule && bal !== null && bal < Number(p.rule.min);
+  const bonusMode = p?.mode === "bonus";
+  const bonusMin = Number(p?.bonus_rule?.min ?? 60);
+  const belowMin = !!p && !p.can_redeem && bal !== null && (bonusMode ? bal < bonusMin : !!p.rule && bal < Number(p.rule.min));
   const added = p?.added;
 
   return (
@@ -786,15 +805,22 @@ function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: ()
             <div className="flex items-center justify-between"><span className="text-slate-400">Cash added to game</span><span className="font-bold text-sky-400" data-testid="redeem-cash-added">{money2(added?.cash ?? 0)}</span></div>
             <div className="flex items-center justify-between"><span className="text-slate-400">Bonus added to game</span><span className="font-bold text-[#ffd966]" data-testid="redeem-bonus-added">{money2(added?.bonus ?? 0)}</span></div>
             <div className="flex items-center justify-between"><span className="text-slate-400">Game balance (full)</span><span className="font-bold text-white">{bal !== null ? money2(bal) : "—"}</span></div>
-            {p.needs_confirm && <div className="flex items-center justify-between"><span className="text-slate-400">Voided (above maximum)</span><span className="font-bold text-rose-400" data-testid="redeem-voided">{money2(p.voided ?? 0)}</span></div>}
+            {p.needs_confirm && <div className="flex items-center justify-between"><span className="text-slate-400">{bonusMode ? "Not carried over" : "Voided (above maximum)"}</span><span className="font-bold text-rose-400" data-testid="redeem-voided">{money2(p.voided ?? 0)}</span></div>}
           </div>
 
           {/* cashout range, with the detailed rules behind the (i) */}
           <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-5 py-4 text-sm" data-testid="redeem-rule">
-            <span className="text-slate-400">
-              Cashouts range{" "}
-              {p.rule ? <b className="text-white">from {money(p.rule.min)} to {money(p.rule.max)}</b> : <b className="text-white">unlocks when you add $5 or more of your own cash</b>}
-            </span>
+            {bonusMode ? (
+              <span className="text-slate-400" data-testid="bonus-range">
+                Bonus cashout from <b className="text-white">{money(bonusMin)}</b>:{" "}
+                {p.bonus_rule?.table.map((t, i) => <span key={t.made}>{i > 0 && " · "}<b className="text-white">{t.made}</b> pays <b className="text-emerald-400">{t.wallet}</b></span>)}{" "}to your wallet
+              </span>
+            ) : (
+              <span className="text-slate-400">
+                Cashouts range{" "}
+                {p.rule ? <b className="text-white">from {money(p.rule.min)} to {money(p.rule.max)}</b> : <b className="text-white">unlocks when you add $5 or more of your own cash</b>}
+              </span>
+            )}
             <button onClick={() => setShowRules(true)} aria-label="Cashout rules in detail" data-testid="redeem-info"
               className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-white/15 bg-white/5 text-xs font-black italic text-slate-300 transition hover:bg-white/10 hover:text-white">i</button>
           </div>
@@ -802,7 +828,9 @@ function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: ()
           {p.needs_confirm && (
             <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-2xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-sm text-rose-200">
               <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} data-testid="redeem-confirm" className="mt-0.5 h-4 w-4 accent-rose-400" />
-              <span>I understand {money2(p.voided ?? 0)} above my maximum will be voided and cannot be recovered.</span>
+              <span>{bonusMode
+                ? <>I understand only {money2(p.payout ?? 0)} will be added to my wallet and the other {money2(p.voided ?? 0)} of my bonus winnings will not be carried over.</>
+                : <>I understand {money2(p.voided ?? 0)} above my maximum will be voided and cannot be recovered.</>}</span>
             </label>
           )}
 
@@ -811,7 +839,7 @@ function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: ()
               <Info className="mt-0.5 h-5 w-5 shrink-0 text-rose-400" />
               <div>
                 <p className="font-bold text-rose-400">{belowMin ? "Below Minimum Cashout!" : "Can't cash out yet"}</p>
-                <p className="mt-0.5">{belowMin && p.rule ? `You must have at least ${money2(p.rule.min)} in the game to cash out.` : p.reason}</p>
+                <p className="mt-0.5">{belowMin ? `You must have at least ${money2(bonusMode ? bonusMin : Number(p.rule!.min))} in the game to cash out.` : p.reason}</p>
               </div>
             </div>
           )}
@@ -833,13 +861,13 @@ function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: ()
         <button className="h-14 rounded-2xl border border-white/10 bg-black/40 text-base font-bold text-white transition hover:bg-white/10" onClick={onBack}>Close</button>
       </div>
 
-      {showRules && p && <CashoutRulesDetail table={p.table} note={p.note} rule={p.rule} onClose={() => setShowRules(false)} />}
+      {showRules && p && <CashoutRulesDetail table={p.table} note={p.note} rule={p.rule} bonus={p.bonus_rule} onClose={() => setShowRules(false)} />}
     </div>
   );
 }
 
 /** The (i) popup: how cashout works, the full limits table (the player's row highlighted), and what bonus money does. */
-function CashoutRulesDetail({ table, note, rule, onClose }: { table: RedeemPreview["table"]; note: string; rule: RedeemPreview["rule"]; onClose: () => void }) {
+function CashoutRulesDetail({ table, note, rule, bonus, onClose }: { table: RedeemPreview["table"]; note: string; rule: RedeemPreview["rule"]; bonus?: RedeemPreview["bonus_rule"]; onClose: () => void }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", onKey);
@@ -871,7 +899,15 @@ function CashoutRulesDetail({ table, note, rule, onClose }: { table: RedeemPrevi
           </table>
         </div>
         <p className="mt-2 text-xs text-slate-400">x3 / x12 mean 3 / 12 times the cash you added. {note}</p>
-        <p className="mt-3 rounded-xl bg-[#ffd966]/10 p-3 text-sm text-[#ffd966]"><b>Bonus balance:</b> it can only be added to a game, never withdrawn directly. Cash added from bonus counts like any other cash added, so the same table and limits apply to what you win with it.</p>
+        <div className="mt-4 rounded-2xl border border-[#ffd966]/30 bg-[#ffd966]/10 p-4 text-sm text-[#ffd966]" data-testid="bonus-rule-detail">
+          <p className="font-bold">Bonus balance rule</p>
+          <p className="mt-1 text-[#ffd966]/90">Bonus can only be added to a game, never withdrawn directly. If a game was funded <b>only by bonus</b> (no cash of your own added), the game balance must reach <b>{bonus?.min ? `$${Number(bonus.min).toFixed(0)}` : "$60"}</b> to cash out, and your wallet is credited a fixed amount:</p>
+          <table className="mt-2 w-full text-left">
+            <thead className="text-[11px] font-extrabold uppercase tracking-wider text-[#ffd966]/70"><tr><th className="py-1">Game balance</th><th className="py-1">Credited to wallet</th></tr></thead>
+            <tbody>{(bonus?.table ?? []).map((t) => <tr key={t.made} className="border-t border-[#ffd966]/20"><td className="py-1.5 font-bold">{t.made}</td><td className="py-1.5 font-bold text-emerald-300">{t.wallet}</td></tr>)}</tbody>
+          </table>
+          <p className="mt-2 text-xs text-[#ffd966]/80">{bonus?.note ?? "The rest of the balance is not carried over."} If you add your own cash to the game, the cash table above applies instead.</p>
+        </div>
         <button onClick={onClose} className="mt-4 h-12 w-full rounded-2xl bg-gradient-to-r from-[#3B82F6] to-[#8B5CF6] text-base font-black text-white transition hover:brightness-110 active:scale-[0.98]">Got it</button>
       </div>
     </div>
