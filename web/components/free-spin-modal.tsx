@@ -1,12 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Sparkles, Trophy } from "lucide-react";
 import { FreeSpin } from "./free-spin";
+import { OPEN_WALLET_EVENT } from "./wallet-panel";
 
 export function TiredOfLosingCard({ className = "" }: { className?: string }) {
   const [open, setOpen] = useState(false);
+
+  // "Deposit now" asks for the wallet: step aside so the wallet is not left hidden behind this popup.
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener(OPEN_WALLET_EVENT, close);
+    return () => window.removeEventListener(OPEN_WALLET_EVENT, close);
+  }, [open]);
 
   return (
     <>
