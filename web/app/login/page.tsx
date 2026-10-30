@@ -9,6 +9,7 @@ import { Notice, Spinner } from "@/components/ui/bits";
 import { Button } from "@/components/ui/button";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { afterAuthPath } from "@/lib/utils";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,10 +17,10 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // If already logged in, redirect immediately to dashboard or admin
+  // If already logged in, go straight to the homepage (or the page they were sent here from)
   useEffect(() => {
     if (!loading && player) {
-      router.replace(player.is_admin ? "/admin" : "/dashboard");
+      router.replace(afterAuthPath());
     }
   }, [player, loading, router]);
 
@@ -34,7 +35,7 @@ export default function LoginPage() {
         body: { identifier: f.get("identifier"), password: f.get("password") },
       });
       await refresh();
-      router.push(r.player.is_admin ? "/admin" : "/dashboard");
+      router.push(afterAuthPath());
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -50,7 +51,7 @@ export default function LoginPage() {
           <p className="text-sm text-slate-300">You are already signed into your account. Redirecting...</p>
           <div className="flex justify-center gap-3">
             <Button asChild className="bg-gradient-to-r from-[#7c3aed] to-[#38bdf8] text-white font-bold">
-              <Link href={player.is_admin ? "/admin" : "/dashboard"}>Go to Dashboard</Link>
+              <Link href="/">Go to home</Link>
             </Button>
           </div>
         </div>

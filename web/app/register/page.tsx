@@ -9,6 +9,7 @@ import { Notice, Spinner } from "@/components/ui/bits";
 import { Button } from "@/components/ui/button";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { afterAuthPath } from "@/lib/utils";
 
 function RegisterForm() {
   const router = useRouter();
@@ -18,10 +19,10 @@ function RegisterForm() {
   const [busy, setBusy] = useState(false);
   const minAge = config?.brand.min_age ?? 18;
 
-  // If already logged in, redirect immediately to dashboard
+  // If already logged in, go straight to the homepage
   useEffect(() => {
     if (!loading && player) {
-      router.replace("/dashboard");
+      router.replace(afterAuthPath());
     }
   }, [player, loading, router]);
 
@@ -42,7 +43,7 @@ function RegisterForm() {
         },
       });
       await refresh();
-      router.push("/dashboard");
+      router.push(afterAuthPath());
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -58,7 +59,7 @@ function RegisterForm() {
           <p className="text-sm text-slate-300">You already have an active account session. Redirecting...</p>
           <div className="flex justify-center gap-3">
             <Button asChild className="bg-gradient-to-r from-[#7c3aed] to-[#38bdf8] text-white font-bold">
-              <Link href="/dashboard">Go to Dashboard</Link>
+              <Link href="/">Go to home</Link>
             </Button>
           </div>
         </div>
