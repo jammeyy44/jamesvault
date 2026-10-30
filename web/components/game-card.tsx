@@ -1,3 +1,4 @@
+import { GameArt } from "./game-art";
 import Link from "next/link";
 import { useState } from "react";
 import { Heart, Play, Sparkles, Wrench } from "lucide-react";
@@ -10,24 +11,8 @@ type Props = {
   onPlay?: (game: Game) => void;
 };
 
-const DEFAULT_COVERS = [
-  "/images/game_royal_vault.webp",
-  "/images/game_estar.webp",
-  "/images/game_royal_treasure.webp",
-  "/images/game_yolo_wheel.webp",
-  "/images/game_vblink.webp",
-];
-
-function getCover(game: Game) {
-  if (game.image_url) return game.image_url;
-  const idx = Math.abs(game.name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0)) % DEFAULT_COVERS.length;
-  return DEFAULT_COVERS[idx];
-}
-
 export function GameCard({ game, onFavorite, onPlay }: Props) {
-  const [broken, setBroken] = useState(false);
   const maintenance = game.status === "maintenance";
-  const coverUrl = broken ? DEFAULT_COVERS[0] : getCover(game);
 
   return (
     <Link
@@ -41,14 +26,7 @@ export function GameCard({ game, onFavorite, onPlay }: Props) {
       
       {/* Full-bleed poster image container with 3:4 aspect ratio matching reference image 2 */}
       <div className="relative aspect-[3/4] w-full overflow-hidden bg-slate-900">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={coverUrl}
-          alt={game.name}
-          loading="lazy"
-          onError={() => setBroken(true)}
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-        />
+        <GameArt game={game} className="h-full w-full [container-type:size]" />
 
         {/* Top badges */}
         <div className="absolute left-2.5 top-2.5 flex items-center gap-1 z-10">

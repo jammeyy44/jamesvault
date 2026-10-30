@@ -173,3 +173,6 @@ Every new cashout request is posted to the support group (optionally into its ow
 
 ### Images and speed
 Site artwork in `web/public/images` is WebP, sized for the screen (about 50-100 KB each) and cached by the browser for a year (`immutable`). To change an image, save the new one under a NEW file name, otherwise visitors keep the cached old one. Game thumbnails uploaded in Admin are decoded, shrunk to at most 720 px wide and stored as WebP automatically (needs `Pillow`, now in `requirements.txt`).
+
+### Removing games from the catalog
+`python catalog_keep.py game-vault juwa` (from `GameAPI`, virtualenv active) previews which games would be removed; add `--yes` to apply. Games players already have logins for are hidden instead of deleted. `seed_site.py` only creates catalog games on a brand-new install, so deleted games do not come back on later deploys. A game without an uploaded thumbnail shows a neutral tile with its initials; upload its artwork in Admin -> Game catalog.

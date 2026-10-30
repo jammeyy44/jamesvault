@@ -7,6 +7,7 @@ import { api, ApiError, errorMessage, type Game } from "@/lib/api";
 import { OPEN_WALLET_EVENT, notifyWalletChanged } from "./wallet-panel";
 import { TestYourLuckBanner } from "./test-your-luck";
 import { cn } from "@/lib/utils";
+import { GameArt } from "./game-art";
 
 type Access = {
   mode: "sandbox" | "live" | "disabled";
@@ -28,24 +29,6 @@ const num = (v?: string | null) => Number(v ?? 0);
 const canAddCash = (a: Access) => a.cash_enabled || (!!a.bonus_enabled && num(a.bonus_balance) > 0);
 const money = (v: string | number) => `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: Number.isInteger(Number(v)) ? 0 : 2, maximumFractionDigits: 2 })}`;
 const money2 = (v: string | number) => `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const DEFAULT_COVERS: Record<string, string> = {
-  "royal-vault": "/images/game_royal_vault.webp",
-  "estar": "/images/game_estar.webp",
-  "royal-treasure": "/images/game_royal_treasure.webp",
-  "yolo-lucky-wheel": "/images/game_yolo_wheel.webp",
-  "vblink": "/images/game_vblink.webp",
-};
-
-function getGameCover(game: { slug?: string; name: string; image_url: string | null }) {
-  if (game.image_url) return game.image_url;
-  if (game.slug && DEFAULT_COVERS[game.slug]) return DEFAULT_COVERS[game.slug];
-  const slug = game.name.toLowerCase().replace(/[^a-z0-9]/g, "-");
-  for (const k of Object.keys(DEFAULT_COVERS)) {
-    if (slug.includes(k) || k.includes(slug)) return DEFAULT_COVERS[k];
-  }
-  return DEFAULT_COVERS["royal-vault"];
-}
 
 const btnSky = "inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-sm transition hover:scale-[1.02] active:scale-95 disabled:opacity-50 shadow-md";
 const btnDark = "inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-[#182035] hover:bg-[#1f2942] text-white font-bold text-sm transition hover:scale-[1.02] active:scale-95";
@@ -220,7 +203,6 @@ function GameDashboard({
     } catch { /* clipboard */ }
   };
 
-  const coverUrl = getGameCover(state.game);
   const hasAccount = !!state.account;
 
   return (
@@ -229,8 +211,7 @@ function GameDashboard({
       <div className="rounded-3xl border border-white/10 bg-[#121829] p-5 sm:p-6 shadow-2xl flex flex-col">
         {/* Game artwork poster */}
         <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-slate-900 border border-white/10 shadow-md">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={coverUrl} alt={state.game.name} className="h-full w-full object-cover" />
+          <GameArt game={state.game} label className="group h-full w-full [container-type:size]" />
         </div>
 
         {/* Title row with Mint Green circular play button */}
@@ -442,7 +423,6 @@ function LoginDetailsModal({
     } catch { /* clipboard */ }
   };
 
-  const coverUrl = getGameCover(game);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-md"
@@ -463,10 +443,7 @@ function LoginDetailsModal({
 
         {/* Game icon and title chip */}
         <div className="mt-4 flex items-center gap-3 rounded-2xl bg-white/5 border border-white/10 p-3">
-          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={coverUrl} alt={game.name} className="h-full w-full object-cover" />
-          </div>
+          <GameArt game={game} className="h-10 w-10 shrink-0 rounded-xl border border-white/10 [container-type:size]" />
           <p className="text-base font-extrabold text-white truncate">{game.name}</p>
         </div>
 
@@ -599,10 +576,7 @@ function Cash({ state, onClose, onBack, onRedeem, onChanged }: { state: Access; 
       <Sandbox text={state.sandbox_notice} />
       
       <div className="mt-4 flex items-center gap-4 rounded-2xl bg-white/5 border border-white/10 p-4">
-        <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-white/10">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={getGameCover(state.game)} alt="" className="h-full w-full object-cover" />
-        </div>
+        <GameArt game={state.game} className="h-14 w-14 shrink-0 rounded-xl border border-white/10 [container-type:size]" />
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between">
             <p className="truncate text-base font-extrabold text-white">{state.game.name}</p>

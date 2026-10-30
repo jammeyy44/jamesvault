@@ -49,6 +49,11 @@ def seed_admins():
 
 
 def seed_catalog():
+    """First-time setup only: one catalog entry per provider. Once the catalog has any game, the admins own it (add, edit and
+    delete in Admin -> Game catalog), so a deleted game is never brought back by a later deploy."""
+    if CatalogGame.query.count():
+        print("Catalog already set up; not adding games automatically.")
+        return
     created = 0
     for provider in Provider.query.all():
         slug = slugify(provider.name)

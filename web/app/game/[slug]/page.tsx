@@ -14,6 +14,7 @@ import { OPEN_WALLET_EVENT, notifyWalletChanged } from "@/components/wallet-pane
 import { TiredOfLosingCard } from "@/components/free-spin-modal";
 import { TestYourLuckBanner } from "@/components/test-your-luck";
 import { CashoutLimitsModal } from "@/components/cashout-limits-modal";
+import { GameArt } from "@/components/game-art";
 import { cn } from "@/lib/utils";
 
 type Access = {
@@ -41,25 +42,6 @@ type RedeemPreview = {
   bonus_rule?: { table: { made: string; wallet: string }[]; min: string; note: string };
 };
 type RedeemResult = { status: string; payout: string; voided: string; note: string | null };
-
-const DEFAULT_COVERS: Record<string, string> = {
-  "royal-vault": "/images/game_royal_vault.webp",
-  "estar": "/images/game_estar.webp",
-  "royal-treasure": "/images/game_royal_treasure.webp",
-  "yolo-lucky-wheel": "/images/game_yolo_wheel.webp",
-  "vblink": "/images/game_vblink.webp",
-  "game-vault": "/images/game_royal_vault.webp",
-};
-
-function getGameCover(game: { slug?: string; name: string; image_url: string | null }) {
-  if (game.image_url) return game.image_url;
-  if (game.slug && DEFAULT_COVERS[game.slug]) return DEFAULT_COVERS[game.slug];
-  const slug = game.name.toLowerCase().replace(/[^a-z0-9]/g, "-");
-  for (const k of Object.keys(DEFAULT_COVERS)) {
-    if (slug.includes(k) || k.includes(slug)) return DEFAULT_COVERS[k];
-  }
-  return DEFAULT_COVERS["royal-vault"];
-}
 
 const num = (v?: string | null) => Number(v ?? 0);
 const money = (v: string | number) => `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: Number.isInteger(Number(v)) ? 0 : 2, maximumFractionDigits: 2 })}`;
@@ -124,7 +106,7 @@ export default function FullscreenGamePage() {
     slug,
     name: displayName,
     category: "Slots, Table Games",
-    image_url: DEFAULT_COVERS[slug] || "/images/game_royal_vault.webp",
+    image_url: null,
     status: "active",
   };
 
@@ -192,7 +174,6 @@ export default function FullscreenGamePage() {
   };
 
   const currentGame = access?.game || fallbackGame;
-  const coverUrl = getGameCover(currentGame);
   const hasAccount = !!access?.account;
   // Until the server has answered we do not know whether this player already has a login: show a placeholder, never "Get access".
   const checking = access === null && !error;
@@ -228,12 +209,7 @@ export default function FullscreenGamePage() {
               
               {/* Full-bleed game artwork poster */}
               <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-slate-900 border border-white/10 shadow-lg">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={coverUrl}
-                  alt={currentGame.name}
-                  className="h-full w-full object-cover transition-transform duration-500 hover:scale-105"
-                />
+                <GameArt game={currentGame} label className="group h-full w-full [container-type:size]" />
               </div>
 
               {/* Title row with Mint Green circular play button */}
@@ -486,7 +462,6 @@ function FullscreenLoginDetailsModal({
     } catch { /* clipboard */ }
   };
 
-  const coverUrl = getGameCover(game);
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-md animate-in fade-in duration-200"
@@ -507,10 +482,7 @@ function FullscreenLoginDetailsModal({
 
         {/* Game icon & title chip */}
         <div className="mt-4 flex items-center gap-3 rounded-2xl bg-white/5 border border-white/10 p-3">
-          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-slate-900">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={coverUrl} alt={game.name} className="h-full w-full object-cover" />
-          </div>
+          <GameArt game={game} className="h-10 w-10 shrink-0 rounded-xl border border-white/10 [container-type:size]" />
           <p className="text-base font-extrabold text-white truncate">{game.name}</p>
         </div>
 
@@ -742,8 +714,7 @@ function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: ()
 
       {/* game + login + live balance */}
       <div className="mt-4 flex items-center gap-4 rounded-2xl border border-white/10 bg-black/30 p-4">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={getGameCover(state.game)} alt="" className="h-16 w-16 shrink-0 rounded-xl border border-white/10 object-cover" />
+        <GameArt game={state.game} className="h-16 w-16 shrink-0 rounded-xl border border-white/10 [container-type:size]" />
         <div className="min-w-0 flex-1">
           <p className="truncate text-lg font-extrabold text-white">{state.game.name}</p>
           <p className="mt-0.5 text-xs text-slate-400">Login</p>
