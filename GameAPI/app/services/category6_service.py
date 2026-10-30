@@ -66,7 +66,8 @@ class Category6Service(BaseGameService):
             return {"error": f"unexpected response (HTTP {response.status_code})"}
         code = body.get("code")
         if code == 0:
-            return {"data": body.get("data") or {}}
+            data = body.get("data")
+            return {"data": data if isinstance(data, dict) else {}}
         if code in (3, 4) and _style + 1 < len(self._styles):  # token refused: try the next documented style
             previous = (self._ms, self._upper)
             self._ms, self._upper = self._styles[_style + 1]

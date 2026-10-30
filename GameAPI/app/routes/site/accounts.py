@@ -147,13 +147,16 @@ def get_access(slug):
         logger.exception("create_account failed")
         undo()
         return json_error("The game provider could not create your access. Please try again later.", 502, code="provider_error")
-    if isinstance(created, dict):  # use the name and player id the provider actually created
-        real_name = str(created.get("username") or "")[:60]
-        if real_name and real_name != acct.provider_username:
-            logger.info("provider renamed the login %s -> %s", acct.provider_username, real_name)
-            acct.provider_username = real_name
-        if created.get("user_id"):
-            acct.provider_user_id = str(created["user_id"])[:40]
+    try:
+        if isinstance(created, dict):  # use the name and player id the provider actually created
+            real_name = str(created.get("username") or "")[:60]
+            if real_name and real_name != acct.provider_username:
+                logger.info("provider renamed the login %s -> %s", acct.provider_username, real_name)
+                acct.provider_username = real_name
+            if created.get("user_id"):
+                acct.provider_user_id = str(created["user_id"])[:40]
+    except Exception:  # the provider created the login: never lose it because of a bookkeeping problem
+        logger.exception("could not record the provider's account details")
     acct.status = 'active'
     audit("game_account.create", target=slug, detail={"sandbox": acct.sandbox})
     db.session.commit()
