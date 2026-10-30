@@ -6,7 +6,7 @@ from flask import current_app, jsonify, request
 from sqlalchemy.exc import IntegrityError
 
 from app import db
-from app.models_site import CashRequest, CatalogGame, GameAccount, iso
+from app.models_site import CashRequest, CatalogGame, GameAccount, Player, iso
 from app.services import wallet as ledger
 from app.services.gateway import AmbiguousOutcome, GatewayError, get_gateway, make_credentials
 from app.utils.auth import audit, current_player, json_error, player_required, rate_limit, utcnow
@@ -58,6 +58,28 @@ def _cash_cfg(game):
     }
 
 
+SIGNUP_BONUS_PERCENT = 50
+REGULAR_BONUS_PERCENT = 10
+
+
+def cash_bonus_info(player):
+    """What the player gets on top of the cash they add from their wallet. Needs a verified email."""
+    verified = bool(player.email_verified)
+    signup_open = player.signup_bonus_claimed_at is None
+    if not verified:
+        percent, kind = 0, None
+    elif signup_open:
+        percent, kind = SIGNUP_BONUS_PERCENT, "signup"
+    else:
+        percent, kind = REGULAR_BONUS_PERCENT, "regular"
+    return {"email_verified": verified, "signup_available": signup_open, "kind": kind, "percent": percent,
+            "signup_percent": SIGNUP_BONUS_PERCENT, "regular_percent": REGULAR_BONUS_PERCENT}
+
+
+def _bonus_for(amount, percent):
+    return (Decimal(amount) * percent / 100).quantize(Decimal("0.01"), rounding="ROUND_DOWN")
+
+
 def _state(player, game):
     acct = _account(player, game)
     mode = _mode()
@@ -69,6 +91,7 @@ def _state(player, game):
         "account": {"username": acct.provider_username, "created_at": iso(acct.created_at)} if acct else None,
         "cash_enabled": _cash_enabled(),
         "cash": _cash_cfg(game),
+        "cash_bonus": cash_bonus_info(player),
         "sandbox_notice": None,
         "wallet_funded": _wallet_funded(),
         "bonus_enabled": mode != "disabled",
@@ -247,6 +270,12 @@ def access_credentials(slug):
     return jsonify({"username": acct.provider_username, "password": decrypt_secret(acct.password_enc)})
 
 
+@site_bp.route('/cash-bonus')
+@player_required
+def cash_bonus():
+    return jsonify(cash_bonus_info(current_player()))
+
+
 @site_bp.route('/games/<slug>/balance')
 @player_required
 @rate_limit('game-balance', 120, 3600)
@@ -382,7 +411,16 @@ def _add_cash_from_balance(player, game, acct, amount, key, bucket="wallet"):
     try:
         db.session.flush()
         ledger.debit(player.id, cents, 'cash_to_game', 'cash_request', req.id, bucket=bucket)
-        audit("cash.request", target=game.slug, detail={"amount": str(amount), "source": bucket})
+        bonus_amount = Decimal("0")
+        if bucket == "wallet" and player.email_verified:
+            # The signup bonus is claimed atomically (only one request can win it); everything after that earns the regular bonus.
+            won = Player.query.filter(Player.id == player.id, Player.signup_bonus_claimed_at.is_(None)).update(
+                {"signup_bonus_claimed_at": utcnow()}, synchronize_session=False)
+            req.bonus_kind = "signup" if won == 1 else "regular"
+            bonus_amount = _bonus_for(amount, SIGNUP_BONUS_PERCENT if won == 1 else REGULAR_BONUS_PERCENT)
+            req.bonus_amount = bonus_amount
+        audit("cash.request", target=game.slug, detail={"amount": str(amount), "source": bucket,
+                                                         "bonus": str(bonus_amount), "bonus_kind": req.bonus_kind})
         db.session.commit()
     except ledger.InsufficientFunds:
         db.session.rollback()
@@ -398,12 +436,15 @@ def _add_cash_from_balance(player, game, acct, amount, key, bucket="wallet"):
     gateway = get_gateway()
     reason = None
     try:
-        gateway.recharge(acct, amount)
+        gateway.recharge(acct, Decimal(amount) + (req.bonus_amount or Decimal("0")))  # the bonus goes straight into the game
         req.status, req.note = 'completed', ("Sandbox: test credit" if req.sandbox else None)
     except GatewayError as e:  # refused before anything was applied: give the money back
         req.status, req.note = 'failed', str(e)[:300]
         reason = getattr(e, "reason", None)  # the provider's own reason: shown to staff accounts only
         ledger.credit(player.id, cents, 'cash_refund', 'cash_request', req.id, bucket=bucket)
+        if req.bonus_kind == "signup":  # the signup bonus was not delivered, so it is still available
+            Player.query.filter_by(id=player.id).update({"signup_bonus_claimed_at": None}, synchronize_session=False)
+        req.bonus_amount = Decimal("0")
     except Exception:  # unknown outcome: keep the funds held for staff to reconcile
         logger.exception("recharge outcome unknown for cash request %s", req.id)
         req.status = 'needs_review'
@@ -418,6 +459,7 @@ def _add_cash_from_balance(player, game, acct, amount, key, bucket="wallet"):
 
 def _cash_view(r):
     return {"id": r.id, "game": r.account.game.name, "amount": f"{r.amount:.2f}", "source": r.source, "status": r.status,
+            "bonus": f"{(r.bonus_amount or 0):.2f}", "bonus_kind": r.bonus_kind,
             "sandbox": r.sandbox, "note": r.note, "created_at": iso(r.created_at)}
 
 

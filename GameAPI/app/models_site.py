@@ -45,6 +45,8 @@ class Player(db.Model):
     last_login_at = db.Column(db.DateTime, nullable=True)
     # Bumped on logout / password change / reset: any session cookie issued before that stops working.
     session_version = db.Column(db.Integer, nullable=False, default=0, server_default='0')
+    # Set when the 50% signup bonus is used (on the first cash added to any one game); cleared again if that add fails.
+    signup_bonus_claimed_at = db.Column(db.DateTime, nullable=True)
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -367,6 +369,9 @@ class CashRequest(db.Model):
     game_account_id = db.Column(db.Integer, db.ForeignKey('game_accounts.id'), nullable=False, index=True)
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     source = db.Column(db.String(8), nullable=False, default='wallet', server_default='wallet')  # wallet | bonus
+    # Extra credit the game received on top of `amount` (signup 50% / regular 10%). It never counts towards the cashout range.
+    bonus_amount = db.Column(db.Numeric(12, 2), nullable=False, default=0, server_default='0')
+    bonus_kind = db.Column(db.String(8), nullable=True)  # signup | regular
     idempotency_key = db.Column(db.String(64), nullable=False)
     # awaiting_staff -> processing -> completed | failed | needs_review (ambiguous provider outcome: reconcile by hand)
     # or awaiting_staff -> rejected

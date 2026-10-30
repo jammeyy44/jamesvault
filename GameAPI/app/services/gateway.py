@@ -47,7 +47,7 @@ class SandboxGateway:
         from app.models_site import CashRequest, RedeemRequest
         rows = CashRequest.query.filter_by(game_account_id=account.id, status='completed').all()
         taken = RedeemRequest.query.filter_by(game_account_id=account.id, status='completed').all()
-        return sum((r.amount for r in rows), Decimal("0.00")) - sum((Decimal(r.balance_cents) / 100 for r in taken), Decimal("0.00"))
+        return sum((r.amount + (r.bonus_amount or 0) for r in rows), Decimal("0.00")) - sum((Decimal(r.balance_cents) / 100 for r in taken), Decimal("0.00"))
 
     def recharge(self, account, amount):
         return None  # the completed CashRequest row is the sandbox ledger

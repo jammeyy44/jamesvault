@@ -70,6 +70,28 @@ function Card({ title, children, action }: { title: string; children: React.Reac
   );
 }
 
+function VerifyEmailBox() {
+  const [msg, setMsg] = useState<{ tone: "error" | "success"; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    setBusy(true); setMsg(null);
+    try { const r = await api<{ message: string }>("/auth/verify-email/request", { method: "POST" }); setMsg({ tone: "success", text: r.message }); }
+    catch (e) { setMsg({ tone: "error", text: errorMessage(e) }); } finally { setBusy(false); }
+  };
+  return (
+    <div className="mt-4 space-y-2 rounded-xl border border-line p-3 text-sm">
+      <p className="font-semibold">Verify your email to unlock bonuses</p>
+      <ul className="list-disc space-y-0.5 pl-5 text-muted">
+        <li><b className="text-ink">50% signup bonus</b> on the first cash you add to any one game</li>
+        <li><b className="text-ink">10% bonus</b> on every cash add after that</li>
+        <li>Bonus is added <b className="text-ink">directly into your game</b> and does not change your cashout range</li>
+      </ul>
+      {msg && <Notice tone={msg.tone}>{msg.text}</Notice>}
+      <Button size="sm" onClick={send} disabled={busy}>{busy ? "Sending…" : "Send confirmation email"}</Button>
+    </div>
+  );
+}
+
 function Overview() {
   const { player, unread } = useAuth();
   const claims = useApi<{ items: { id: number; promotion: string; status: string; created_at: string }[] }>("/account/claims");
@@ -81,6 +103,9 @@ function Overview() {
           <Row k="Username" v={player!.username} /><Row k="Email" v={player!.email} />
           <Row k="Email verified" v={player!.email_verified ? "Yes" : "Not verified"} />
         </dl>
+        {!player!.email_verified ? <VerifyEmailBox /> : (
+          <p className="mt-4 rounded-xl border border-line p-3 text-sm text-muted">Bonuses unlocked: <b className="text-ink">50% signup bonus</b> on your first cash added to any one game, then <b className="text-ink">10%</b> on every add, credited directly into the game.</p>
+        )}
       </Card>
       <Card title="Referrals" action={<Link href="/refer" className="text-sm font-semibold text-primary">Open</Link>}>
         {refs.data ? (

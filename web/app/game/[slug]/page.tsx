@@ -30,9 +30,10 @@ type Access = {
   bonus_enabled?: boolean;
   bonus_balance?: string | null;
   bonus_min?: string;
+  cash_bonus?: { email_verified: boolean; signup_available: boolean; kind: "signup" | "regular" | null; percent: number; signup_percent: number; regular_percent: number };
 };
 
-type CashResult = { status: string; sandbox: boolean; amount: string; note: string | null; source?: "wallet" | "bonus"; reason?: string };
+type CashResult = { status: string; sandbox: boolean; amount: string; note: string | null; source?: "wallet" | "bonus"; reason?: string; bonus?: string; bonus_kind?: "signup" | "regular" | null };
 type RedeemPreview = {
   table: { deposit: string; min: string; max: string }[]; note: string; sandbox: boolean; latest_deposit: string | null;
   rule: { row: number; deposit: string; min: string; max: string } | null; game_balance: string | null; payout: string | null;
@@ -620,6 +621,19 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
         </p>
       )}
 
+      {state.cash_bonus && source === "wallet" && (
+        <div data-testid="cash-bonus-banner" className="mt-5 rounded-2xl border border-[#ffd966]/30 bg-gradient-to-br from-[#ffd966]/15 to-transparent p-3.5 text-xs text-[#ffe9a8]">
+          {!state.cash_bonus.email_verified ? (
+            <p><b className="text-[#ffd966]">Verify your email to unlock bonuses:</b> {state.cash_bonus.signup_percent}% signup bonus on the first cash you add to any one game, then {state.cash_bonus.regular_percent}% on every add after that. Bonus is added straight into your game. Verify it from your account page.</p>
+          ) : state.cash_bonus.kind === "signup" ? (
+            <p><b className="text-[#ffd966]">{state.cash_bonus.percent}% signup bonus</b> on this add (first cash added to any one game). It goes straight into your game. After this, every add earns {state.cash_bonus.regular_percent}% bonus.</p>
+          ) : (
+            <p><b className="text-[#ffd966]">{state.cash_bonus.percent}% bonus</b> on every cash add, credited straight into your game. (Your one-time {state.cash_bonus.signup_percent}% signup bonus is already used.)</p>
+          )}
+          <p className="mt-1 text-[11px] text-[#ffe9a8]/70">Bonus does not count towards your cashout range, and is not paid when you add from your bonus balance.</p>
+        </div>
+      )}
+
       <p className="mt-5 text-center text-xs font-semibold text-slate-400">Amount{source === "bonus" ? " from bonus balance" : ""}</p>
       <div className="mt-2 flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 px-5 py-4">
         <button onClick={() => setEditing((v) => !v)} aria-label="Edit amount" className="text-sky-400"><Pencil className="h-4 w-4" /></button>
@@ -640,6 +654,12 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
       <dl className="mt-5 space-y-2 rounded-2xl bg-white/5 border border-white/10 p-4 text-xs text-slate-300">
         {state.wallet_funded && <div className="flex justify-between"><dt className="text-slate-400">Wallet balance</dt><dd className="font-bold text-white">{state.wallet_balance !== null && state.wallet_balance !== undefined ? money2(state.wallet_balance) : "—"}</dd></div>}
         {state.bonus_enabled && <div className="flex justify-between"><dt className="text-slate-400">Bonus balance</dt><dd className="font-bold text-[#ffd966]">{money2(bonus)}</dd></div>}
+        {source === "wallet" && !!state.cash_bonus?.percent && (
+          <>
+            <div className="flex justify-between"><dt className="text-slate-400">{state.cash_bonus.kind === "signup" ? "Signup bonus" : "Bonus"} ({state.cash_bonus.percent}%)</dt><dd className="font-bold text-[#ffd966]" data-testid="cash-bonus-amount">+{money2(Math.floor(amount * state.cash_bonus.percent) / 100)}</dd></div>
+            <div className="flex justify-between"><dt className="text-slate-400">Total added to game</dt><dd className="font-bold text-white">{money2(amount + Math.floor(amount * state.cash_bonus.percent) / 100)}</dd></div>
+          </>
+        )}
         <div className="flex justify-between"><dt className="text-slate-400">{source === "bonus" ? "From bonus" : "Add cash range"}</dt><dd className="font-bold text-white">{source === "bonus" ? `min ${money(state.bonus_min ?? "1")} or the whole balance` : `${money(min)} – ${money(max)}`}</dd></div>
       </dl>
 
@@ -649,7 +669,8 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
         const ok = done.status === "completed";
         const held = done.status === "needs_review";
         const failed = done.status === "failed";
-        const text = ok ? `${money2(done.amount)} added to the game${done.source === "bonus" ? " from your bonus balance" : ""}.`
+        const extra = Number(done.bonus ?? 0);
+        const text = ok ? `${money2(done.amount)} added to the game${done.source === "bonus" ? " from your bonus balance" : ""}${extra > 0 ? `, plus ${money2(extra)} ${done.bonus_kind === "signup" ? "signup " : ""}bonus added straight to your game` : ""}.`
           : failed ? `The game could not add the cash, so nothing was charged: your ${from} is unchanged.${done.reason ? ` Provider said: ${done.reason}` : done.note ? ` (${done.note})` : ""}`
           : held ? `Your funds are held while we confirm the credit with the game. Nothing is lost.`
           : `Request for ${money(done.amount)} received. It will be credited once our team confirms your payment.`;
