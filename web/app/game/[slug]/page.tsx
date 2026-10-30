@@ -194,6 +194,8 @@ export default function FullscreenGamePage() {
   const currentGame = access?.game || fallbackGame;
   const coverUrl = getGameCover(currentGame);
   const hasAccount = !!access?.account;
+  // Until the server has answered we do not know whether this player already has a login: show a placeholder, never "Get access".
+  const checking = access === null && !error;
 
   return (
     <div className="min-h-screen bg-[#070A12] text-white flex flex-col pb-16">
@@ -247,6 +249,7 @@ export default function FullscreenGamePage() {
 
                 <button
                   onClick={hasAccount ? () => setShowCredsModal(true) : handleGetAccess}
+                  disabled={checking}
                   aria-label="Play game"
                   className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black shadow-[0_4px_20px_rgba(52,211,153,0.5)] transition hover:scale-105 active:scale-95">
                   <Play className="h-5 w-5 fill-current ml-0.5" />
@@ -255,8 +258,17 @@ export default function FullscreenGamePage() {
 
               <hr className="my-5 border-white/10" />
 
-              {/* State A: User does NOT have an account yet (Exact match for Screenshot 3) */}
-              {!hasAccount && (
+              {checking && (
+                <div className="space-y-3 animate-pulse" aria-busy="true" aria-label="Checking your login" data-testid="access-checking">
+                  <div className="h-12 w-1/2 rounded-xl bg-white/[0.07]" />
+                  <div className="grid grid-cols-2 gap-3"><div className="h-11 rounded-xl bg-white/[0.07]" /><div className="h-11 rounded-xl bg-white/[0.07]" /></div>
+                  <div className="h-12 rounded-xl bg-white/[0.07]" />
+                  <div className="h-12 rounded-xl bg-white/[0.07]" />
+                </div>
+              )}
+
+              {/* State A: the player has no login yet (shown only once we KNOW that) */}
+              {!checking && !hasAccount && (
                 <div className="space-y-4">
                   {/* Blue info notice box */}
                   <div className="flex items-center gap-3 rounded-2xl border border-sky-400/25 bg-sky-500/15 p-4 text-xs sm:text-sm text-sky-200">
