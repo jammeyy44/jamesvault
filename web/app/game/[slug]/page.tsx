@@ -76,6 +76,26 @@ export default function FullscreenGamePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showCredsModal, setShowCredsModal] = useState(false);
+  const [confirming, setConfirming] = useState<"reset" | "remove" | null>(null);
+  const [working, setWorking] = useState(false);
+  const [note, setNote] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+
+  const resetPassword = async () => {
+    setWorking(true); setNote(null);
+    try {
+      await api(`/games/${slug}/access/reset-password`, { method: "POST" });
+      setConfirming(null);
+      setNote({ tone: "ok", text: "Your password was changed. Open “View login details & password” to see the new one." });
+    } catch (e) { setNote({ tone: "error", text: errorMessage(e) }); } finally { setWorking(false); }
+  };
+  const removeLogin = async () => {
+    setWorking(true); setNote(null);
+    try {
+      await api(`/games/${slug}/access`, { method: "DELETE" });
+      setConfirming(null); setBalance(null); setShowCredsModal(false);
+      await loadAccess();
+    } catch (e) { setConfirming(null); setNote({ tone: "error", text: errorMessage(e) }); } finally { setWorking(false); }
+  };
 
   // Fast pre-fill with optimistic game info to open instantly
   const displayName = slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
@@ -324,6 +344,28 @@ export default function FullscreenGamePage() {
                     className="w-full text-center text-xs font-bold text-sky-400 hover:text-sky-300 hover:underline">
                     View login details &amp; password →
                   </button>
+
+                  {note && (
+                    <p role={note.tone === "error" ? "alert" : "status"} className={"rounded-xl p-3 text-xs " + (note.tone === "error" ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-100")}>{note.text}</p>
+                  )}
+                  {confirming ? (
+                    <div className="rounded-xl border border-white/15 bg-black/20 p-3" data-testid="confirm-box">
+                      <p className="text-xs text-slate-200">{confirming === "reset" ? "Set a new password for this login? The old one stops working." : "Remove this login from your list? The game balance must be $0.00. You can get a new login later."}</p>
+                      <div className="mt-3 grid grid-cols-2 gap-2">
+                        <button disabled={working} data-testid="confirm-yes" onClick={confirming === "reset" ? resetPassword : removeLogin}
+                          className={"inline-flex h-10 items-center justify-center gap-2 rounded-xl text-xs font-black transition disabled:opacity-50 " + (confirming === "reset" ? "bg-[#38bdf8] text-slate-950 hover:bg-[#0ea5e9]" : "bg-rose-500 text-white hover:bg-rose-400")}>
+                          {working && <Spinner className="h-3.5 w-3.5" />}{confirming === "reset" ? "Reset" : "Remove"}
+                        </button>
+                        <button disabled={working} onClick={() => setConfirming(null)} className="h-10 rounded-xl border border-white/20 text-xs font-bold text-white hover:bg-white/10">Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button onClick={() => { setNote(null); setConfirming("reset"); }} className="h-11 flex-1 rounded-xl bg-white/10 text-xs font-bold text-white transition hover:bg-white/15 sm:text-sm">Reset password</button>
+                      <button onClick={() => { setNote(null); setConfirming("remove"); }} aria-label="Remove login" data-testid="remove-login"
+                        className="grid h-11 w-12 place-items-center rounded-xl bg-rose-500/15 text-rose-300 transition hover:bg-rose-500/25"><Trash2 className="h-4 w-4" /></button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -624,6 +666,17 @@ function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: ()
         <button onClick={onBack} className="text-xs font-bold text-sky-400 hover:underline">← Back to Game</button>
       </div>
 
+      <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm" data-testid="how-cashout">
+        <p className="font-bold text-white">How cashout works</p>
+        <ol className="mt-2 list-decimal space-y-1 pl-5 text-white/70">
+          <li>Add cash to this game (from your wallet or your bonus balance) and play.</li>
+          <li>The <b>latest cash you added to this game</b> sets how much you can redeem: a minimum and a maximum (see the table below). Adding under $5 does not unlock redeeming.</li>
+          <li>Press Redeem. Your whole game balance leaves the game and the allowed amount is added to your <b>wallet</b>. Anything above the maximum is voided, and you confirm that first.</li>
+          <li>One redeem per cash added. To redeem again, add cash to the game again.</li>
+          <li>From your wallet you can then cash out to your payment method (minimum $50).</li>
+        </ol>
+        <p className="mt-3 rounded-xl bg-[#ffd966]/10 p-3 text-[#ffd966]"><b>Bonus balance:</b> it can only be added to a game, never withdrawn directly. Cash added from bonus counts like any other cash added, so the same table and limits apply to what you win with it.</p>
+      </div>
       {!p && !error && <div className="grid h-32 place-items-center"><Spinner className="h-6 w-6 text-sky-400" /></div>}
       {p && (
         <>
