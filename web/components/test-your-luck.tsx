@@ -22,6 +22,13 @@ interface TestYourLuckBannerProps {
   onClaimDiamonds?: (diamonds: number, label: string) => void;
 }
 
+const TIERS = [
+  { deposits: 3, diamonds: 5 },
+  { deposits: 4, diamonds: 8 },
+  { deposits: 5, diamonds: 15 },
+] as const;
+const MAX_TIER = TIERS[TIERS.length - 1];
+
 export function TestYourLuckBanner({ className, onClaimSuccess, onClaimDiamonds }: TestYourLuckBannerProps) {
   const { player } = useAuth();
   const [streak, setStreak] = useState<LossStreakState>({
@@ -126,57 +133,29 @@ export function TestYourLuckBanner({ className, onClaimSuccess, onClaimDiamonds 
             </div>
           </div>
 
-          {/* Middle Milestone Progression Nodes: 3 Losses -> 3 💎 | 5 Losses -> 5 💎 | 10 Losses -> 10 💎 */}
+          {/* Milestones: 3 deposits -> 5 💎 | 4 deposits -> 8 💎 | 5 deposits -> 15 💎 (max) */}
           <div className="flex items-center justify-center gap-2 sm:gap-3 py-1 px-2">
-            
-            {/* Node 1: 3 Losses -> 3 💎 */}
-            <div className="flex flex-col items-center">
-              <span
-                className={cn(
-                  "rounded-full px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-black transition-all",
-                  losses >= 3 && !is_voided
-                    ? "bg-emerald-400 text-slate-950 shadow-[0_0_12px_rgba(52,211,153,0.7)] scale-105"
-                    : "bg-emerald-950/80 border border-emerald-500/30 text-emerald-400"
-                )}
-              >
-                3 💎
-              </span>
-              <span className="mt-1 text-[9px] sm:text-[10px] font-bold text-emerald-300/70">3 losses</span>
-            </div>
-
-            <span className={cn("h-0.5 w-4 sm:w-6 rounded-full transition-all", losses >= 3 && !is_voided ? "bg-emerald-400" : "bg-emerald-900")} />
-
-            {/* Node 2: 5 Losses -> 5 💎 */}
-            <div className="flex flex-col items-center">
-              <span
-                className={cn(
-                  "rounded-full px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-black transition-all",
-                  losses >= 5 && !is_voided
-                    ? "bg-emerald-400 text-slate-950 shadow-[0_0_12px_rgba(52,211,153,0.7)] scale-105"
-                    : "bg-emerald-950/80 border border-emerald-500/30 text-emerald-400"
-                )}
-              >
-                5 💎
-              </span>
-              <span className="mt-1 text-[9px] sm:text-[10px] font-bold text-emerald-300/70">5 losses</span>
-            </div>
-
-            <span className={cn("h-0.5 w-4 sm:w-6 rounded-full transition-all", losses >= 5 && !is_voided ? "bg-emerald-400" : "bg-emerald-900")} />
-
-            {/* Node 3: 10 Losses -> 10 💎 */}
-            <div className="flex flex-col items-center">
-              <span
-                className={cn(
-                  "rounded-full px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-black transition-all",
-                  losses >= 10 && !is_voided
-                    ? "bg-emerald-400 text-slate-950 shadow-[0_0_12px_rgba(52,211,153,0.7)] scale-105"
-                    : "bg-emerald-950/80 border border-emerald-500/30 text-emerald-400"
-                )}
-              >
-                10 💎
-              </span>
-              <span className="mt-1 text-[9px] sm:text-[10px] font-bold text-emerald-300/70">10 losses</span>
-            </div>
+            {TIERS.map((t, i) => {
+              const reached = losses >= t.deposits && !is_voided;
+              return (
+                <div key={t.deposits} className="flex items-center gap-2 sm:gap-3">
+                  {i > 0 && <span className={cn("h-0.5 w-4 sm:w-6 rounded-full transition-all", reached ? "bg-emerald-400" : "bg-emerald-900")} />}
+                  <div className="flex flex-col items-center">
+                    <span
+                      className={cn(
+                        "rounded-full px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-xs font-black transition-all",
+                        reached
+                          ? "bg-emerald-400 text-slate-950 shadow-[0_0_12px_rgba(52,211,153,0.7)] scale-105"
+                          : "bg-emerald-950/80 border border-emerald-500/30 text-emerald-400"
+                      )}
+                    >
+                      {t.diamonds} 💎
+                    </span>
+                    <span className="mt-1 text-[9px] sm:text-[10px] font-bold text-emerald-300/70">{t.deposits} deposits</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
 
           {/* Right Action: Claim Button or View More */}
@@ -231,18 +210,14 @@ export function TestYourLuckBanner({ className, onClaimSuccess, onClaimDiamonds 
             <span>
               Consecutive deposits without cashout: <strong className="text-emerald-300 font-bold">{losses}</strong>
             </span>
-            {losses > 0 && losses < 3 && (
-              <span className="text-emerald-400/90 font-bold">({3 - losses} more for 3 💎)</span>
-            )}
-            {losses >= 3 && losses < 5 && (
-              <span className="text-emerald-400/90 font-bold">(Claim 3 💎 or {5 - losses} more for 5 💎)</span>
-            )}
-            {losses >= 5 && losses < 10 && (
-              <span className="text-emerald-400/90 font-bold">(Claim 5 💎 or {10 - losses} more for 10 💎)</span>
-            )}
-            {losses >= 10 && (
-              <span className="text-emerald-400/90 font-bold">(MAX 10 💎 Unlocked!)</span>
-            )}
+            {(() => {
+              if (losses >= MAX_TIER.deposits) return <span className="text-emerald-400/90 font-bold">(MAX {MAX_TIER.diamonds} 💎 Unlocked!)</span>;
+              const next = TIERS.find((t) => losses < t.deposits)!;
+              const earned = [...TIERS].reverse().find((t) => losses >= t.deposits);
+              if (earned) return <span className="text-emerald-400/90 font-bold">(Claim {earned.diamonds} 💎 or {next.deposits - losses} more for {next.diamonds} 💎)</span>;
+              if (losses > 0) return <span className="text-emerald-400/90 font-bold">({next.deposits - losses} more for {next.diamonds} 💎)</span>;
+              return null;
+            })()}
           </div>
 
           <div className="flex items-center gap-2">
@@ -299,7 +274,7 @@ export function TestYourLuckBanner({ className, onClaimSuccess, onClaimDiamonds 
                   <h4 className="font-bold text-emerald-300 flex items-center gap-1.5 mb-1">
                     <ShieldCheck className="h-4 w-4" /> 1. Automatic Deposit Counting
                   </h4>
-                  <p>Loss streak is automatically calculated from how many deposits you make without cashing out.</p>
+                  <p>Your streak is counted automatically from how many deposits you make without cashing out.</p>
                 </div>
 
                 <div className="rounded-xl bg-emerald-950/60 border border-emerald-500/20 p-3">
@@ -307,9 +282,9 @@ export function TestYourLuckBanner({ className, onClaimSuccess, onClaimDiamonds 
                     <Gem className="h-4 w-4" /> 2. Tiered Diamond Rewards
                   </h4>
                   <ul className="list-disc pl-4 space-y-1 text-slate-200">
-                    <li><strong>3 Deposits without cashout:</strong> Earn <strong>3 💎 Diamonds</strong>.</li>
-                    <li><strong>5 Deposits without cashout:</strong> Earn <strong>5 💎 Diamonds</strong>.</li>
-                    <li><strong>10 Deposits without cashout:</strong> Earn <strong>10 💎 Diamonds</strong> (Max tier).</li>
+                    <li><strong>3 Deposits without cashout:</strong> Earn <strong>5 💎 Diamonds</strong>.</li>
+                    <li><strong>4 Deposits without cashout:</strong> Earn <strong>8 💎 Diamonds</strong>.</li>
+                    <li><strong>5 Deposits without cashout:</strong> Earn <strong>15 💎 Diamonds</strong> (Max tier).</li>
                   </ul>
                 </div>
 

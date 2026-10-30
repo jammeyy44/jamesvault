@@ -24,6 +24,19 @@ def _task_view(task, state):
             "reason": state["reason"], "progress": state["progress"], "available": state["available"]}
 
 
+# "Test your luck": consecutive paid deposits without a cashout -> diamonds. (deposits needed, diamonds), highest tier first.
+LUCK_TIERS = ((5, 15), (4, 8), (3, 5))
+LUCK_MIN_DEPOSITS = LUCK_TIERS[-1][0]
+
+
+def luck_reward(deposits: int) -> int:
+    """Diamonds earned for this many consecutive deposits without a cashout (0 below the first tier)."""
+    for need, diamonds in LUCK_TIERS:
+        if deposits >= need:
+            return diamonds
+    return 0
+
+
 def _evaluate_loss_streak(player_id: int):
     # Find latest cashout
     last_cashout = (
@@ -67,21 +80,16 @@ def _evaluate_loss_streak(player_id: int):
         if prev_cutoff:
             prev_dep_query = prev_dep_query.filter(PaymentOrder.created_at > prev_cutoff)
         prev_count = prev_dep_query.count()
-        if prev_count >= 3:
+        if prev_count >= LUCK_MIN_DEPOSITS:
             voided = True
-            voided_amount = 10 if prev_count >= 10 else 5 if prev_count >= 5 else 3
+            voided_amount = luck_reward(prev_count)
 
-    claimable = 0
-    if losses >= 10:
-        claimable = 10
-    elif losses >= 5:
-        claimable = 5
-    elif losses >= 3:
-        claimable = 3
+    claimable = luck_reward(losses)
 
     return {
         "losses": losses,
         "claimable": claimable,
+        "tiers": [{"deposits": need, "diamonds": diamonds} for need, diamonds in reversed(LUCK_TIERS)],
         "is_voided": voided and losses == 0,
         "voided_amount": voided_amount if (voided and losses == 0) else 0
     }
@@ -208,8 +216,8 @@ def get_loss_streak():
 def claim_loss_streak():
     player = current_player()
     st = _evaluate_loss_streak(player.id)
-    if st["claimable"] < 3:
-        return json_error("You need at least 3 consecutive deposits without cashout to claim diamonds.", 400)
+    if st["claimable"] < 1:
+        return json_error(f"You need at least {LUCK_MIN_DEPOSITS} consecutive deposits without cashout to claim diamonds.", 400)
     diamonds = st["claimable"]
     claim_key = f"loss_streak:{player.id}:{utcnow().strftime('%Y%m%d%H%M%S%f')}"
     claim = TaskClaim(player_id=player.id, task_key="loss_streak", claim_key=claim_key, diamonds=diamonds)
