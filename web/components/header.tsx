@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bell, ChevronDown, LayoutDashboard, LifeBuoy, LogOut, Menu, Plus, Shield, ShieldCheck, Wallet, X } from "lucide-react";
+import { Bell, Check, ChevronDown, LayoutDashboard, LifeBuoy, LogOut, Menu, Shield, ShieldCheck, Wallet, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Logo } from "./logo";
 import { OPEN_WALLET_EVENT, WALLET_EVENT, WalletDrawer } from "./wallet-panel";
@@ -92,17 +92,15 @@ export function Header() {
                   onClick={openWallet}
                   aria-label="Open wallet"
                   title="Add cash, cash out, history"
-                  className="group flex cursor-pointer items-center gap-2 rounded-2xl border border-sky-400/25 bg-gradient-to-b from-[#182036] to-[#0F1524] py-1 pl-2.5 pr-1 shadow-[0_6px_20px_rgba(14,165,233,0.15)] transition hover:border-sky-300/50 hover:shadow-[0_8px_26px_rgba(56,189,248,0.3)] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300">
-                  <span className="grid h-6 w-6 place-items-center rounded-full bg-sky-500/20 text-sky-300 font-black text-xs ring-1 ring-sky-400/30">$</span>
-                  <span className="font-extrabold text-white text-sm tabular-nums tracking-tight" data-testid="header-balance">
+                  className="group flex h-11 cursor-pointer items-center gap-2.5 rounded-2xl border border-white/[0.07] bg-[#161C2C] py-1 pl-2.5 pr-1 transition hover:border-white/15 hover:bg-[#1A2236] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300"
+                >
+                  <span className="grid h-7 w-7 place-items-center rounded-full bg-[#1F3350] text-[13px] font-bold text-sky-300">$</span>
+                  <span className="min-w-[2.6rem] text-[15px] font-semibold tabular-nums text-slate-100" data-testid="header-balance">
                     {balance !== null ? Number(balance).toFixed(2) : "0.00"}
                   </span>
-                  <span
-                    className="relative grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-sky-300 via-sky-400 to-indigo-500 text-slate-950 shadow-[0_4px_14px_rgba(56,189,248,0.55)] ring-1 ring-white/40 transition group-hover:scale-110 group-hover:shadow-[0_6px_20px_rgba(56,189,248,0.75)]"
-                  >
-                    {!tipSeen && !reduce && <span className="absolute inset-0 -z-10 animate-ping rounded-xl bg-sky-400/60" aria-hidden />}
-                    <Wallet className="h-[18px] w-[18px]" strokeWidth={2.4} />
-                    <span className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-emerald-400 text-slate-950 ring-2 ring-[#0F1524]" aria-hidden><Plus className="h-3 w-3" strokeWidth={4} /></span>
+                  <span className="relative grid h-9 w-10 place-items-center rounded-xl bg-[#58B2F7] text-[#0B1B33] transition group-hover:bg-[#6FBFFA]">
+                    {!tipSeen && !reduce && <span className="absolute inset-0 -z-10 animate-ping rounded-xl bg-sky-400/40" aria-hidden />}
+                    <Wallet className="h-[19px] w-[19px]" strokeWidth={1.9} />
                   </span>
                 </button>
 
@@ -128,23 +126,25 @@ export function Header() {
               <Link
                 href="/dashboard?tab=notifications"
                 aria-label="Notifications"
-                className="relative grid h-10 w-10 place-items-center rounded-2xl border border-white/10 bg-[#131927] text-slate-300 hover:text-white hover:border-white/20 transition"
+                className="relative grid h-11 w-11 place-items-center rounded-2xl border border-white/[0.07] bg-[#161C2C] text-slate-400 transition hover:border-white/15 hover:text-slate-200"
               >
-                <Bell className="h-4 w-4" />
+                <Bell className="h-[18px] w-[18px]" strokeWidth={1.8} />
                 {unread > 0 && (
-                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-sky-400 ring-2 ring-[#131927]" />
+                  <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-sky-400 ring-2 ring-[#161C2C]" />
                 )}
               </Link>
 
-              {/* 3. User profile avatar - Clicking opens SideDrawer */}
+              {/* 3. User profile avatar - opens the side drawer */}
               <button
                 onClick={() => setOpen(true)}
                 aria-label="Open profile menu"
-                className="relative grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] border border-white/20 text-white font-black shadow-sm transition hover:brightness-110 active:scale-95"
+                className="relative grid h-11 w-11 place-items-center rounded-full border-2 border-white/15 bg-[#161C2C] p-[3px] transition hover:border-white/30 active:scale-95"
               >
-                <span className="text-sm font-black uppercase">{player.username.slice(0, 1)}</span>
-                <span className="absolute -top-1 -right-1 grid h-4 w-4 place-items-center rounded-full bg-[#131927] border border-white/30 text-[9px] text-sky-400">
-                  ✓
+                <span className="grid h-full w-full place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9] text-[15px] font-bold uppercase text-white">
+                  {player.username.slice(0, 1)}
+                </span>
+                <span className="absolute -right-0.5 -top-0.5 grid h-[18px] w-[18px] place-items-center rounded-full border border-white/20 bg-[#2A3042] text-slate-200" aria-hidden>
+                  <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
                 </span>
               </button>
             </>
