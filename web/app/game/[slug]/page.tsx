@@ -750,7 +750,6 @@ function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: ()
   };
 
   const bal = p?.game_balance != null ? Number(p.game_balance) : null;
-  const willCredit = p?.can_redeem ? Number(p.payout ?? 0) : bal !== null && p?.rule ? Math.min(bal, Number(p.rule.max)) : null;
   const belowMin = !!p && !p.can_redeem && !!p.rule && bal !== null && bal < Number(p.rule.min);
   const added = p?.added;
 
@@ -788,14 +787,13 @@ function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: ()
             <div className="flex items-center justify-between"><span className="text-slate-400">Bonus added to game</span><span className="font-bold text-[#ffd966]" data-testid="redeem-bonus-added">{money2(added?.bonus ?? 0)}</span></div>
             <div className="flex items-center justify-between"><span className="text-slate-400">Game balance (full)</span><span className="font-bold text-white">{bal !== null ? money2(bal) : "—"}</span></div>
             {p.needs_confirm && <div className="flex items-center justify-between"><span className="text-slate-400">Voided (above maximum)</span><span className="font-bold text-rose-400" data-testid="redeem-voided">{money2(p.voided ?? 0)}</span></div>}
-            <div className="flex items-center justify-between"><span className="text-slate-400">Will be credited to wallet</span><span className="font-bold text-emerald-400" data-testid="redeem-payout">{willCredit !== null ? money2(willCredit) : "—"}</span></div>
           </div>
 
           {/* cashout range, with the detailed rules behind the (i) */}
           <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-black/30 px-5 py-4 text-sm" data-testid="redeem-rule">
             <span className="text-slate-400">
               Cashouts range{" "}
-              {p.rule ? <b className="text-white">from {money(p.rule.min)} to {money(p.rule.max)}</b> : <b className="text-white">unlocks when you add $5 or more</b>}
+              {p.rule ? <b className="text-white">from {money(p.rule.min)} to {money(p.rule.max)}</b> : <b className="text-white">unlocks when you add $5 or more of your own cash</b>}
             </span>
             <button onClick={() => setShowRules(true)} aria-label="Cashout rules in detail" data-testid="redeem-info"
               className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-white/15 bg-white/5 text-xs font-black italic text-slate-300 transition hover:bg-white/10 hover:text-white">i</button>
@@ -855,7 +853,7 @@ function CashoutRulesDetail({ table, note, rule, onClose }: { table: RedeemPrevi
         <h3 className="pr-10 text-xl font-black">How cashout works</h3>
         <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-sm text-slate-300" data-testid="how-cashout">
           <li>Add cash to this game (from your wallet or your bonus balance) and play.</li>
-          <li>The <b>latest cash you added to this game</b> sets how much you can redeem: a minimum and a maximum (table below). Adding under $5 does not unlock cashing out.</li>
+          <li>The <b>latest cash you added to this game</b> sets your cashout range: a minimum and a maximum (table below). Bonus added to the game does not count towards the range, and adding under $5 does not unlock cashing out.</li>
           <li>Press Cash Out. Your whole game balance leaves the game and the allowed amount is added to your <b>wallet</b>. Anything above the maximum is voided, and you confirm that first.</li>
           <li>One cash out per cash added. To cash out again, add cash to the game again.</li>
           <li>From your wallet you can then withdraw to your payment method (minimum $50).</li>

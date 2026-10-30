@@ -74,7 +74,7 @@ def _preview(player, game, acct):
     dep = rules.latest_game_deposit(player.id, acct.id)
     rule = rules.limits(dep.amount_cents) if dep else None
     if dep is None or rule is None:
-        out["reason"] = "Deposit cash ($5 or more) into this game to unlock redeeming. The amount you deposit into the game sets your limits."
+        out["reason"] = "Add $5 or more of your own cash to this game to unlock cashing out. The cash you add (bonus does not count) sets your cashout range."
         return out
     out.update(latest_deposit=ledger.fmt(dep.amount_cents), rule=_rule_view(rule), _dep=dep, _rule=rule)
     try:
@@ -88,11 +88,11 @@ def _preview(player, game, acct):
         return out
     out.update(game_balance=ledger.fmt(bal), _balance=bal)
     if RedeemRequest.query.filter_by(deposit_lock_id=dep.id).first():
-        out["reason"] = "You've already redeemed for your latest deposit into this game. Add cash to this game to redeem again."
+        out["reason"] = "You've already cashed out for the latest cash you added to this game. Add cash to this game to cash out again."
         return out
     if bal < rule["min_cents"]:
         out["reason"] = (f"You need at least ${ledger.fmt(rule['min_cents'])} in this game to redeem (set by your latest "
-                         f"deposit into this game of ${ledger.fmt(dep.amount_cents)}). Your game balance is ${ledger.fmt(bal)}.")
+                         f"cash added to this game of ${ledger.fmt(dep.amount_cents)}). Your game balance is ${ledger.fmt(bal)}.")
         return out
     payout, voided = rules.outcome(bal, rule)
     out.update(payout=ledger.fmt(payout), voided=ledger.fmt(voided), can_redeem=True, needs_confirm=voided > 0)

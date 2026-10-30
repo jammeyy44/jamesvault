@@ -92,25 +92,18 @@ class GameDepositRecord:
         self.created_at = created_at
 
 
-def latest_game_deposit(player_id, game_account_id=None):
-    """The player's most recent deposit INTO THE GAME (CashRequest), or fallback to wallet deposit."""
+def latest_game_deposit(player_id, game_account_id):
+    """The cash the player most recently added TO THIS GAME (a completed Add Cash that was not paid from bonus).
+
+    This alone sets the cashout range. Bonus added to the game never counts, wallet deposits that were not added to this game
+    never count, and another game's cash never counts. No cash added to this game yet -> None (no range, nothing to redeem)."""
     from app.models_site import CashRequest
     from app.services import wallet as ledger
-    
-    q = CashRequest.query.filter_by(player_id=player_id, status='completed')
-    if game_account_id is not None:
-        q = q.filter_by(game_account_id=game_account_id)
-    req = q.order_by(CashRequest.processed_at.desc(), CashRequest.id.desc()).first()
-    if req:
-        return GameDepositRecord(req.id, ledger.to_cents(req.amount), req.created_at)
-        
-    if game_account_id is not None:
-        req_any = CashRequest.query.filter_by(player_id=player_id, status='completed').order_by(CashRequest.processed_at.desc(), CashRequest.id.desc()).first()
-        if req_any:
-            return GameDepositRecord(req_any.id, ledger.to_cents(req_any.amount), req_any.created_at)
-            
-    w_dep = latest_deposit(player_id)
-    if w_dep:
-        return GameDepositRecord(w_dep.id, w_dep.amount_cents, w_dep.created_at)
-    return None
 
+    req = (CashRequest.query
+           .filter_by(player_id=player_id, game_account_id=game_account_id, status='completed')
+           .filter(CashRequest.source != 'bonus')
+           .order_by(CashRequest.processed_at.desc(), CashRequest.id.desc()).first())
+    if req is None:
+        return None
+    return GameDepositRecord(req.id, ledger.to_cents(req.amount), req.created_at)
