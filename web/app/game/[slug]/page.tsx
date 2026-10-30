@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { api, ApiError, errorMessage, type Game } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { Spinner } from "@/components/ui/bits";
+import { Processing, Spinner } from "@/components/ui/bits";
 import { OPEN_WALLET_EVENT, notifyWalletChanged } from "@/components/wallet-panel";
 import { TiredOfLosingCard } from "@/components/free-spin-modal";
 import { TestYourLuckBanner } from "@/components/test-your-luck";
@@ -683,9 +683,9 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
       })()}
 
       <div className="mt-6 flex gap-3">
-        <button className="flex-1 h-12 rounded-2xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-sm transition active:scale-95 shadow-md disabled:opacity-50"
+        <button className={cn("flex-1 h-12 inline-flex items-center justify-center rounded-2xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-sm transition active:scale-95 shadow-md disabled:opacity-50", busy && "btn-processing disabled:opacity-100")}
           onClick={submit} disabled={busy || !valid || gameHasBalance}>
-          {busy ? <Spinner /> : null} Confirm Add Cash
+          {busy ? <Processing label="Adding cash" /> : "Confirm Add Cash"}
         </button>
         <button className="h-12 px-6 rounded-2xl border border-white/10 bg-[#182035] hover:bg-[#1f2942] text-white font-bold text-sm transition"
           onClick={onBack}>
@@ -809,9 +809,9 @@ function FullscreenRedeem({ state, onBack, onDone }: { state: Access; onBack: ()
       )}
 
       <div className="mt-5 grid grid-cols-2 gap-3">
-        <button className="h-14 rounded-2xl bg-[#38bdf8] text-base font-black text-slate-950 shadow-md transition hover:bg-[#0ea5e9] active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
+        <button className={cn("h-14 inline-flex items-center justify-center rounded-2xl bg-[#38bdf8] text-base font-black text-slate-950 shadow-md transition hover:bg-[#0ea5e9] active:scale-95 disabled:cursor-not-allowed disabled:opacity-45", busy && "btn-processing disabled:opacity-100")}
           data-testid="redeem-submit" onClick={submit} disabled={busy || !p?.can_redeem || (p.needs_confirm && !confirm)}>
-          {busy ? <Spinner /> : "Cash Out"}
+          {busy ? <Processing label="Cashing out" /> : "Cash Out"}
         </button>
         <button className="h-14 rounded-2xl border border-white/10 bg-black/40 text-base font-bold text-white transition hover:bg-white/10" onClick={onBack}>Close</button>
       </div>

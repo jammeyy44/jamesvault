@@ -148,9 +148,14 @@ export function Header() {
                 <span className="grid h-full w-full place-items-center rounded-full bg-gradient-to-br from-[#8B5CF6] to-[#6D28D9] text-[15px] font-bold uppercase text-white">
                   {player.username.slice(0, 1)}
                 </span>
-                <span className="absolute -right-0.5 -top-0.5 grid h-[18px] w-[18px] place-items-center rounded-full border border-white/20 bg-[#2A3042] text-slate-200" aria-hidden>
-                  <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
-                </span>
+                {player.email_verified ? (
+                  <span className="absolute -right-0.5 -top-0.5 grid h-[18px] w-[18px] place-items-center rounded-full border border-emerald-300/40 bg-emerald-500 text-white" title="Email verified" data-testid="verified-badge">
+                    <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
+                    <span className="sr-only">Email verified</span>
+                  </span>
+                ) : (
+                  <span className="absolute -right-0.5 -top-0.5 h-[18px] w-[18px] rounded-full border-2 border-white/30 bg-[#2A3042]" title="Email not verified" data-testid="unverified-badge" aria-hidden />
+                )}
               </button>
             </>
           ) : (

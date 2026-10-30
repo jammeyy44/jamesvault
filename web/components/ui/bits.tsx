@@ -55,3 +55,8 @@ export function PageHeader({ eyebrow, title, children }: { eyebrow?: string; tit
     </div>
   );
 }
+
+/** "Adding cash" + bouncing dots, for money buttons that are processing (pair with the btn-processing class). */
+export function Processing({ label }: { label: string }) {
+  return <span role="status" aria-live="polite" className="inline-flex items-center">{label}<span className="proc-dots" aria-hidden="true"><i /><i /><i /></span></span>;
+}
