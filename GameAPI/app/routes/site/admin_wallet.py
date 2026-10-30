@@ -56,7 +56,7 @@ def admin_withdrawal_update(wid):
     reported failed_at_provider. resolve_completed / resolve_failed: reconcile a needs_review payout by hand."""
     action = _body().get('action')
     w = db.session.get(WithdrawalOrder, wid)
-    if not w or action not in ('approve', 'reject', 'credit_back', 'resolve_completed', 'resolve_failed'):
+    if not w or action not in ('approve', 'retry_send', 'reject', 'credit_back', 'resolve_completed', 'resolve_failed'):
         return json_error("Invalid request")
 
     def refund(final_status, note=None):
@@ -92,7 +92,7 @@ def admin_withdrawal_update(wid):
         return jsonify({"status": "completed" if action == 'resolve_completed' else 'failed'})
 
     # approve: the shared service claims the order atomically, so two admins (or Telegram and the site) can never send it twice
-    code, payload = withdrawals.approve(wid)
+    code, payload = withdrawals.approve(wid, retry=(action == 'retry_send'))
     return jsonify(payload), code
 
 

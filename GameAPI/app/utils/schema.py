@@ -38,6 +38,14 @@ def add_missing_columns():
             with engine.begin() as conn:
                 conn.execute(text(ddl))
             added.append(f"{table.name}.{col.name}")
+    if dialect.name == "postgresql":  # columns that had to become BIGINT (a Telegram user id is larger than 2^31)
+        for table, column in (("audit_logs", "actor_id"),):
+            with engine.begin() as conn:
+                kind = conn.execute(text("SELECT data_type FROM information_schema.columns WHERE table_name = :t AND column_name = :c"),
+                                    {"t": table, "c": column}).scalar()
+                if kind == "integer":
+                    conn.execute(text(f'ALTER TABLE "{table}" ALTER COLUMN "{column}" TYPE BIGINT'))
+                    added.append(f"{table}.{column} -> bigint")
     if dialect.name == "postgresql":  # new RemoteProvider members must exist in the native enum type
         from app.models import RemoteProvider
         with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:

@@ -63,7 +63,7 @@ const QUEUES: Record<string, { label: string; path: string; columns: string[]; a
   referrals: { label: "Referrals", path: "/admin/referrals", columns: ["referrer", "referred", "status", "created_at"], patch: "referrals", actions: [{ label: "Confirm", status: "confirmed" }, { label: "Reject", status: "rejected", tone: "danger" }] },
   players: { label: "Players", path: "/admin/players", columns: ["username", "email", "role", "status", "created_at"], patch: "players" },
   "cash-requests": { label: "Cash requests", path: "/admin/cash-requests?status=awaiting_staff,needs_review", columns: ["player", "game", "game_login", "amount", "status", "note", "created_at"], patch: "cash-requests", field: "action" },
-  withdrawals: { label: "Cashouts", path: "/admin/withdrawals?status=pending_review,needs_review,failed_at_provider,submitted", columns: ["player", "method", "amount", "destination", "status", "reference", "note", "created_at"], patch: "withdrawals", field: "action" },
+  withdrawals: { label: "Cashouts", path: "/admin/withdrawals?status=pending_review,sending,needs_review,failed_at_provider,submitted", columns: ["player", "method", "amount", "destination", "status", "reference", "note", "created_at"], patch: "withdrawals", field: "action" },
   payments: { label: "Deposits", path: "/admin/payments", columns: ["player", "method", "amount", "status", "reference", "note", "created_at"], patch: "" },
   "provider-logs": { label: "Provider call log", path: "/admin/provider-logs", columns: ["created_at", "provider", "action", "success", "duration_ms", "detail"], patch: "" },
   audit: { label: "Audit log", path: "/admin/audit", columns: ["created_at", "actor", "action", "target", "ip"], patch: "" },
@@ -529,9 +529,13 @@ function WithdrawalActions({ row, onAct }: { row: any; onAct: (id: number, actio
       </span>
     );
   }
+  if (row.status === "sending") {
+    return <Button size="sm" onClick={() => go(`This cashout was left half-finished. Retry sending $${row.amount} to ${row.destination}?\n\nPaydora recognises the same order and will not pay twice.`, "retry_send")}>Retry sending</Button>;
+  }
   if (row.status === "needs_review") {
     return (
       <span className="inline-flex gap-2">
+        <Button size="sm" onClick={() => go("Retry sending? Paydora recognises the same order and will not pay twice.", "retry_send")}>Retry sending</Button>
         <Button size="sm" variant="secondary" onClick={() => go("Check the payment provider first. Mark as SENT?", "resolve_completed")}>Was sent</Button>
         <Button size="sm" variant="secondary" onClick={() => go("Check the payment provider first. Mark as NOT sent and refund the wallet?", "resolve_failed")}>Not sent (refund)</Button>
       </span>

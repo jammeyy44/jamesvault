@@ -327,8 +327,8 @@ class AuditLog(db.Model):
     __tablename__ = 'audit_logs'
 
     id = db.Column(db.Integer, primary_key=True)
-    actor_type = db.Column(db.String(12), nullable=False)  # admin | player | anonymous | system
-    actor_id = db.Column(db.Integer, nullable=True)
+    actor_type = db.Column(db.String(12), nullable=False)  # admin | player | anonymous | system | telegram
+    actor_id = db.Column(db.BigInteger, nullable=True)  # Telegram user ids do not fit in 32 bits
     action = db.Column(db.String(80), nullable=False, index=True)
     target = db.Column(db.String(120), nullable=True)
     detail = db.Column(db.Text, nullable=True)

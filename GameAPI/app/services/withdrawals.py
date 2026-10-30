@@ -43,10 +43,30 @@ def reject(wid, actor_type=None, actor_id=None, handled_by=None):
     return 200, {"status": "rejected"}
 
 
-def approve(wid, actor_type=None, actor_id=None, handled_by=None):
-    """Send a pending cashout to the payment provider, exactly once. Returns (http_status, payload)."""
-    if not _claim(wid, 'pending_review', 'sending'):
-        return 409, {"error": "This cashout has already been handled."}
+def approve(wid, actor_type=None, actor_id=None, handled_by=None, retry=False):
+    """Send a pending cashout to the payment provider, exactly once. Returns (http_status, payload).
+
+    retry=True re-sends an order that was left in 'sending' (the process stopped mid-way). It is safe because the provider
+    de-duplicates on the idempotency key jv-wd-<id>: it replays the original order instead of creating a second one."""
+    claimed = (_claim(wid, 'sending', 'sending') or _claim(wid, 'needs_review', 'sending')) if retry else _claim(wid, 'pending_review', 'sending')
+    if not claimed:
+        return 409, {"error": "This cashout cannot be sent from its current state." if retry else "This cashout has already been handled."}
+    try:
+        return _send(wid, actor_type, actor_id, handled_by)
+    except Exception:
+        # Whatever went wrong, never leave the order in 'sending' with the money held and nobody told.
+        db.session.rollback()
+        logger.exception("cashout %s: approval was interrupted", wid)
+        order = db.session.get(WithdrawalOrder, wid)
+        if order is not None and order.status == 'sending':
+            order.status = 'needs_review'
+            order.note = f"Approval was interrupted. Check Paydora (idempotency key jv-wd-{wid}), then retry or resolve by hand."
+            tg.queue_withdrawal_refresh(db.session, wid, handled_by)
+            db.session.commit()
+        return 200, {"status": "needs_review", "note": order.note if order else None}
+
+
+def _send(wid, actor_type, actor_id, handled_by):
     order = db.session.get(WithdrawalOrder, wid)
     payments = get_payments()
     if payments is None:
@@ -72,12 +92,20 @@ def approve(wid, actor_type=None, actor_id=None, handled_by=None):
             _refund(wid, 'failed', why[:300])
         else:  # unknown outcome: keep the funds held and reconcile by hand; never retry blindly
             order.status = 'needs_review'
-            order.note = f"Provider outcome unknown ({e.detail or 'no answer'}). Check the provider dashboard, then resolve by hand."[:300]
+            order.note = f"Provider outcome unknown ({e.detail or 'no answer'}). Check the provider dashboard, then retry or resolve by hand."[:300]
     except Exception:
         logger.exception("cashout %s: unexpected error while asking the payment provider", wid)
         order.status = 'needs_review'
-        order.note = "Provider outcome unknown. Check the provider dashboard, then resolve by hand."
-    audit("withdrawal.approve", target=str(wid), detail={"result": order.status}, actor_type=actor_type, actor_id=actor_id)
-    tg.queue_withdrawal_refresh(db.session, wid, handled_by)
-    db.session.commit()
-    return 200, {"status": order.status, "note": order.note}
+        order.note = "Provider outcome unknown. Check the provider dashboard, then retry or resolve by hand."
+    db.session.commit()   # the provider's answer is saved before anything else can fail
+    result = {"status": order.status, "note": order.note}
+    try:
+        audit("withdrawal.approve", target=str(wid), detail={"result": result["status"]}, actor_type=actor_type, actor_id=actor_id)
+        tg.queue_withdrawal_refresh(db.session, wid, handled_by)
+        db.session.commit()
+    except Exception:  # bookkeeping must never undo or hide a payout that already happened
+        db.session.rollback()
+        logger.exception("cashout %s: could not write the audit record (the payout result is saved)", wid)
+        tg.queue_withdrawal_refresh(db.session, wid, handled_by)
+        db.session.commit()
+    return 200, result

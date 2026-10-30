@@ -174,3 +174,52 @@ def test_the_light_balance_endpoint_returns_both_balances_without_a_provider_cal
     body = api.get('/api/v1/wallet/balance').get_json()
     assert body == {"enabled": True, "balance": "123.45", "bonus_balance": "2.50"}
     assert pay.deposits == [] and pay.withdrawals == []
+
+
+# ------------------------------------------------------------------ an approval can never get stuck or lose Paydora's answer
+def test_a_failing_audit_write_cannot_undo_the_payout_result(api, make_player, pay, telegram, monkeypatch):
+    p, wid = _request_cashout(api, make_player)
+    monkeypatch.setattr("app.services.withdrawals.audit", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("integer out of range")))
+    _press(api, f"wd:yes:{wid}")
+    order = WithdrawalOrder.query.one()
+    assert order.status == "submitted" and order.provider_withdrawal_id and order.reference_id    # Paydora's answer survived
+    assert len(pay.withdrawals) == 1
+    assert "Paydora ref:" in [x for m, x in telegram.calls if m == "editMessageText"][-1]["text"]
+
+
+def test_an_interrupted_approval_is_left_for_review_not_stuck_in_sending(api, make_player, pay, telegram, monkeypatch):
+    p, wid = _request_cashout(api, make_player)
+    monkeypatch.setattr("app.services.withdrawals._send", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+    _press(api, f"wd:yes:{wid}")
+    order = WithdrawalOrder.query.one()
+    assert order.status == "needs_review" and "interrupted" in order.note and balance(p["id"]) == 20000 - 7000 + 1000
+
+
+def test_a_cashout_left_in_sending_can_be_retried_and_paydora_deduplicates_by_key(api, make_player, pay, telegram, staff_client):
+    p, wid = _request_cashout(api, make_player)
+    WithdrawalOrder.query.update({"status": "sending"})
+    db.session.commit()
+    root = staff_client("root", "superadmin")
+    assert root.patch(f'/api/v1/admin/withdrawals/{wid}', {"action": "approve"}).status_code == 409        # a plain approve is refused
+    r = root.patch(f'/api/v1/admin/withdrawals/{wid}', {"action": "retry_send"})
+    assert r.status_code == 200 and r.get_json()["status"] == "submitted"
+    assert pay.withdrawals[-1]["idempotency_key"] == f"jv-wd-{wid}"                                        # same key: no second payout
+
+
+def test_needs_review_can_be_retried_too(api, make_player, pay, telegram, staff_client):
+    p, wid = _request_cashout(api, make_player)
+    WithdrawalOrder.query.update({"status": "needs_review"})
+    db.session.commit()
+    root = staff_client("root", "superadmin")
+    assert root.patch(f'/api/v1/admin/withdrawals/{wid}', {"action": "retry_send"}).get_json()["status"] == "submitted"
+    assert root.patch(f'/api/v1/admin/withdrawals/{wid}', {"action": "retry_send"}).status_code == 409    # not retryable once sent
+
+
+def test_a_telegram_user_id_larger_than_32_bits_is_recorded_in_the_audit_log(api, make_player, pay, telegram, _more_telegram_methods):
+    from app.models_site import AuditLog
+    big = 6_123_456_789
+    _more_telegram_methods["members"][big] = "administrator"
+    p, wid = _request_cashout(api, make_player)
+    _press(api, f"wd:reject:{wid}", user_id=big)
+    row = AuditLog.query.filter_by(action="withdrawal.reject").one()
+    assert row.actor_type == "telegram" and row.actor_id == big
