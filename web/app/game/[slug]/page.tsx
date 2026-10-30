@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft, Check, Copy, Eye, EyeOff, FileText, FlaskConical, Gift, Info,
-  KeyRound, Pencil, Play, RefreshCw, Sparkles, Trash2, X
+  ArrowLeft, Check, Copy, Download, Eye, EyeOff, FileText, FlaskConical, Gift, Info,
+  KeyRound, Pencil, RefreshCw, Sparkles, Trash2, X
 } from "lucide-react";
 import { api, ApiError, errorMessage, type Game } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -223,13 +223,15 @@ export default function FullscreenGamePage() {
                   </p>
                 </div>
 
-                <button
-                  onClick={hasAccount ? () => setShowCredsModal(true) : handleGetAccess}
-                  disabled={checking}
-                  aria-label="Play game"
-                  className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-emerald-400 hover:bg-emerald-300 text-slate-950 font-black shadow-[0_4px_20px_rgba(52,211,153,0.5)] transition hover:scale-105 active:scale-95">
-                  <Play className="h-5 w-5 fill-current ml-0.5" />
-                </button>
+                {/* Download the game: the link set in Admin -> Game catalog -> "Download link". Hidden until one is set. */}
+                {access?.game.download_url && (
+                  <a
+                    href={access.game.download_url} target="_blank" rel="noopener noreferrer" download
+                    aria-label={`Download ${currentGame.name}`} title={`Download ${currentGame.name}`} data-testid="download-game"
+                    className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#38bdf8] to-[#3b82f6] text-white shadow-[0_6px_22px_rgba(56,189,248,0.45)] ring-1 ring-white/25 transition hover:scale-105 hover:brightness-110 active:scale-95">
+                    <Download className="h-5 w-5" strokeWidth={2.2} />
+                  </a>
+                )}
               </div>
 
               <hr className="my-5 border-white/10" />
