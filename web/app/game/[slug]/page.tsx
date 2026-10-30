@@ -76,16 +76,32 @@ export default function FullscreenGamePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showCredsModal, setShowCredsModal] = useState(false);
+  const [creds, setCreds] = useState<{ username: string; password: string } | null>(null);
+  const [credError, setCredError] = useState<string | null>(null);
+  const [showPass, setShowPass] = useState(false);
+  const [copiedPass, setCopiedPass] = useState(false);
   const [confirming, setConfirming] = useState<"reset" | "remove" | null>(null);
   const [working, setWorking] = useState(false);
   const [note, setNote] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+
+  const loadCreds = useCallback(() => {
+    api<{ username: string; password: string }>(`/games/${slug}/access/credentials`)
+      .then((c) => { setCreds(c); setCredError(null); })
+      .catch((e) => setCredError(errorMessage(e)));
+  }, [slug]);
+
+  const copyPassword = async () => {
+    if (!creds) return;
+    try { await navigator.clipboard.writeText(creds.password); setCopiedPass(true); setTimeout(() => setCopiedPass(false), 2000); } catch { /* clipboard */ }
+  };
 
   const resetPassword = async () => {
     setWorking(true); setNote(null);
     try {
       await api(`/games/${slug}/access/reset-password`, { method: "POST" });
       setConfirming(null);
-      setNote({ tone: "ok", text: "Your password was changed. Open “View login details & password” to see the new one." });
+      setShowPass(true); loadCreds();   // the new password appears right in the fields below
+      setNote({ tone: "ok", text: "Your password was changed." });
     } catch (e) { setNote({ tone: "error", text: errorMessage(e) }); } finally { setWorking(false); }
   };
   const removeLogin = async () => {
@@ -138,8 +154,11 @@ export default function FullscreenGamePage() {
   useEffect(() => {
     if (access?.account) {
       refreshBalance();
+      loadCreds();
+    } else {
+      setCreds(null); setShowPass(false);
     }
-  }, [access?.account, refreshBalance]);
+  }, [access?.account, refreshBalance, loadCreds]);
 
   const handleGetAccess = async () => {
     if (!player) {
@@ -321,29 +340,26 @@ export default function FullscreenGamePage() {
                     </button>
                   </div>
 
-                  {/* Copyable Account ID box */}
-                  <div
-                    onClick={() => setShowCredsModal(true)}
-                    className="group cursor-pointer rounded-xl border border-white/10 bg-[#182035] hover:bg-[#1f2942] px-4 py-3 flex items-center justify-between transition">
-                    <span className="font-mono text-sm font-bold text-slate-200">
-                      {access?.account?.username}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        access?.account && copyUsername(access.account.username);
-                      }}
-                      className="text-slate-400 hover:text-white transition p-1">
+                  {/* Login details, always visible: username + password (eye to show, copy) */}
+                  {credError && <p role="alert" className="rounded-xl bg-rose-500/15 p-3 text-xs text-rose-200">{credError}</p>}
+                  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#182035] px-4 py-3.5">
+                    <span className="font-mono text-sm font-bold text-slate-200" data-testid="field-username">{creds?.username ?? access?.account?.username}</span>
+                    <button type="button" aria-label="Copy username" onClick={() => access?.account && copyUsername(creds?.username ?? access.account.username)}
+                      className="p-1 text-slate-400 transition hover:text-white">
                       {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
                     </button>
                   </div>
-
-                  <button
-                    onClick={() => setShowCredsModal(true)}
-                    className="w-full text-center text-xs font-bold text-sky-400 hover:text-sky-300 hover:underline">
-                    View login details &amp; password →
-                  </button>
+                  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#182035] px-4 py-3.5">
+                    <span className="font-mono text-sm font-bold text-slate-200" data-testid="field-password">{!creds ? "••••••" : showPass ? creds.password : "••••••"}</span>
+                    <span className="flex items-center gap-2 text-slate-400">
+                      <button type="button" onClick={() => setShowPass((v) => !v)} aria-label={showPass ? "Hide password" : "Show password"} className="p-1 transition hover:text-white">
+                        {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                      <button type="button" aria-label="Copy password" onClick={copyPassword} className="p-1 transition hover:text-white">
+                        {copiedPass ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                      </button>
+                    </span>
+                  </div>
 
                   {note && (
                     <p role={note.tone === "error" ? "alert" : "status"} className={"rounded-xl p-3 text-xs " + (note.tone === "error" ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-100")}>{note.text}</p>
@@ -361,9 +377,9 @@ export default function FullscreenGamePage() {
                     </div>
                   ) : (
                     <div className="flex gap-2">
-                      <button onClick={() => { setNote(null); setConfirming("reset"); }} className="h-11 flex-1 rounded-xl bg-white/10 text-xs font-bold text-white transition hover:bg-white/15 sm:text-sm">Reset password</button>
+                      <button onClick={() => { setNote(null); setConfirming("reset"); }} className="h-12 flex-1 rounded-xl border border-white/15 bg-transparent text-sm font-semibold text-slate-200 transition hover:bg-white/5">Reset password</button>
                       <button onClick={() => { setNote(null); setConfirming("remove"); }} aria-label="Remove login" data-testid="remove-login"
-                        className="grid h-11 w-12 place-items-center rounded-xl bg-rose-500/15 text-rose-300 transition hover:bg-rose-500/25"><Trash2 className="h-4 w-4" /></button>
+                        className="grid h-12 w-14 place-items-center rounded-xl bg-rose-500/20 text-rose-400 transition hover:bg-rose-500/30"><Trash2 className="h-5 w-5" /></button>
                     </div>
                   )}
                 </div>

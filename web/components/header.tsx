@@ -87,22 +87,24 @@ export function Header() {
             <>
               {/* 1. Wallet: balance + one big, obvious button (opens Add Cash / Cashout / History) */}
               <div className="relative">
-                <div className="flex items-center gap-2 rounded-2xl border border-sky-400/25 bg-gradient-to-b from-[#182036] to-[#0F1524] py-1 pl-2.5 pr-1 shadow-[0_6px_20px_rgba(14,165,233,0.15)]">
+                <button
+                  type="button"
+                  onClick={openWallet}
+                  aria-label="Open wallet"
+                  title="Add cash, cash out, history"
+                  className="group flex cursor-pointer items-center gap-2 rounded-2xl border border-sky-400/25 bg-gradient-to-b from-[#182036] to-[#0F1524] py-1 pl-2.5 pr-1 shadow-[0_6px_20px_rgba(14,165,233,0.15)] transition hover:border-sky-300/50 hover:shadow-[0_8px_26px_rgba(56,189,248,0.3)] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300">
                   <span className="grid h-6 w-6 place-items-center rounded-full bg-sky-500/20 text-sky-300 font-black text-xs ring-1 ring-sky-400/30">$</span>
                   <span className="font-extrabold text-white text-sm tabular-nums tracking-tight" data-testid="header-balance">
                     {balance !== null ? Number(balance).toFixed(2) : "0.00"}
                   </span>
-                  <button
-                    onClick={openWallet}
-                    aria-label="Open wallet"
-                    title="Add cash, cash out, history"
-                    className="group relative grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-sky-300 via-sky-400 to-indigo-500 text-slate-950 shadow-[0_4px_14px_rgba(56,189,248,0.55)] ring-1 ring-white/40 transition hover:scale-110 hover:shadow-[0_6px_20px_rgba(56,189,248,0.75)] active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300"
+                  <span
+                    className="relative grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-sky-300 via-sky-400 to-indigo-500 text-slate-950 shadow-[0_4px_14px_rgba(56,189,248,0.55)] ring-1 ring-white/40 transition group-hover:scale-110 group-hover:shadow-[0_6px_20px_rgba(56,189,248,0.75)]"
                   >
                     {!tipSeen && !reduce && <span className="absolute inset-0 -z-10 animate-ping rounded-xl bg-sky-400/60" aria-hidden />}
                     <Wallet className="h-[18px] w-[18px]" strokeWidth={2.4} />
                     <span className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-emerald-400 text-slate-950 ring-2 ring-[#0F1524]" aria-hidden><Plus className="h-3 w-3" strokeWidth={4} /></span>
-                  </button>
-                </div>
+                  </span>
+                </button>
 
                 <AnimatePresence>
                   {!tipSeen && balance !== null && (
