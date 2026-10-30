@@ -30,11 +30,11 @@ const money = (v: string | number) => `$${Number(v).toLocaleString(undefined, { 
 const money2 = (v: string | number) => `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const DEFAULT_COVERS: Record<string, string> = {
-  "royal-vault": "/images/game_royal_vault.jpg",
-  "estar": "/images/game_estar.jpg",
-  "royal-treasure": "/images/game_royal_treasure.jpg",
-  "yolo-lucky-wheel": "/images/game_yolo_wheel.jpg",
-  "vblink": "/images/game_vblink.jpg",
+  "royal-vault": "/images/game_royal_vault.webp",
+  "estar": "/images/game_estar.webp",
+  "royal-treasure": "/images/game_royal_treasure.webp",
+  "yolo-lucky-wheel": "/images/game_yolo_wheel.webp",
+  "vblink": "/images/game_vblink.webp",
 };
 
 function getGameCover(game: { slug?: string; name: string; image_url: string | null }) {

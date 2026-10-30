@@ -184,7 +184,7 @@ function Poster({ diamonds, bonusBalance, streakDays }: { diamonds: number | nul
       <div className="pointer-events-none absolute bottom-0 right-0 sm:right-3 lg:right-6 z-10 h-[92%] sm:h-[95%] w-[46%] sm:w-[42%] max-w-[340px] flex items-end justify-end select-none">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/images/bonus_girl.png"
+          src="/images/bonus_girl.webp"
           alt="StakeSweep Bonus Zone Hostess"
           className="h-full w-auto max-h-full object-contain object-bottom drop-shadow-[0_15px_30px_rgba(0,0,0,0.65)]"
         />

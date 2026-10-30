@@ -138,7 +138,7 @@ export function HomeSlider() {
                 <picture className="block h-full">
                   <source srcSet="/images/hero_model_blonde.webp" type="image/webp" />
                   <img
-                    src="/images/hero_model_blonde.png"
+                    src="/images/hero_model_blonde.webp"
                     alt="Welcome Pass"
                     loading="eager"
                     fetchPriority="high"
@@ -203,7 +203,7 @@ export function HomeSlider() {
                 <picture className="block h-full">
                   <source srcSet="/images/hero_model_brunette.webp" type="image/webp" />
                   <img
-                    src="/images/hero_model_brunette.png"
+                    src="/images/hero_model_brunette.webp"
                     alt="High-Roller Mega Jackpots"
                     loading="lazy"
                     decoding="async"
@@ -264,7 +264,7 @@ export function HomeSlider() {
                 <picture className="block h-full">
                   <source srcSet="/images/bonus_girl.webp" type="image/webp" />
                   <img
-                    src="/images/bonus_girl.png"
+                    src="/images/bonus_girl.webp"
                     alt="Crack Secret Mystery Crates"
                     loading="lazy"
                     decoding="async"

@@ -15,9 +15,16 @@ from app.services.gateway import GatewayError, ProviderGateway, SandboxGateway
 from tests.test_game_access import features, game  # noqa: F401  (fixtures)
 from tests.test_wallet import KEY  # noqa: E402
 
-PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
-JPG = b"\xff\xd8\xff\xe0" + b"0" * 64
-WEBP = b"RIFF\x24\x00\x00\x00WEBP" + b"0" * 64
+def _real_image(fmt, size=(40, 30)):
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", size, (200, 30, 90)).save(buf, fmt)
+    return buf.getvalue()
+
+
+PNG = _real_image("PNG")
+JPG = _real_image("JPEG")
+WEBP = _real_image("WEBP")
 
 
 @pytest.fixture()
@@ -344,17 +351,17 @@ def test_image_url_accepts_https_or_our_uploads_only(game, staff_client):
         assert editor.patch(f'/api/v1/admin/games/{gid}', {"image_url": good}).status_code == 200
 
 
-@pytest.mark.parametrize("data,ext", [(PNG, "png"), (JPG, "jpg"), (WEBP, "webp")])
-def test_staff_can_upload_a_thumbnail_and_it_is_served_safely(game, staff_client, uploads, data, ext):
+@pytest.mark.parametrize("data", [PNG, JPG, WEBP])
+def test_staff_can_upload_a_thumbnail_and_it_is_served_safely(game, staff_client, uploads, data):
     editor = staff_client("editor", "content")
     gid = CatalogGame.query.one().id
     r = upload(editor, gid, data, "whatever-name.exe")                 # the filename is ignored: the real bytes decide
     assert r.status_code == 200
     url = r.get_json()["image_url"]
-    assert url.startswith("/uploads/games/") and url.endswith("." + ext) and len(os.listdir(uploads / "games")) == 1
+    assert url.startswith("/uploads/games/") and url.endswith(".webp") and len(os.listdir(uploads / "games")) == 1   # stored as WebP
     served = editor.c.get(url)
-    assert served.status_code == 200 and served.data == data
-    assert served.headers["Content-Type"].startswith({"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}[ext])
+    assert served.status_code == 200 and served.data[:4] == b"RIFF" and served.data[8:12] == b"WEBP"
+    assert served.headers["Content-Type"].startswith("image/webp")
     assert served.headers["X-Content-Type-Options"] == "nosniff" and "default-src 'none'" in served.headers["Content-Security-Policy"]
     assert CatalogGame.query.one().image_url == url
 
@@ -413,3 +420,22 @@ def test_uploads_need_the_csrf_token(game, staff_client, uploads):
 def test_only_files_we_created_can_be_fetched(app, uploads, name):
     assert app.test_client().get(f'/uploads/games/{name}').status_code == 404
     assert app.test_client().get('/uploads/games/0123456789abcdef0123456789abcdef.png').status_code == 404   # right shape, not there
+
+
+def test_a_big_upload_is_shrunk_to_a_web_sized_image(game, staff_client, uploads):
+    from PIL import Image
+    editor = staff_client("editor", "content")
+    gid = CatalogGame.query.one().id
+    big = _real_image("PNG", (2400, 3200))
+    url = upload(editor, gid, big).get_json()["image_url"]
+    stored = Image.open(uploads / "games" / url.rsplit("/", 1)[1])
+    assert stored.width == 720 and stored.height == 960 and stored.format == "WEBP"
+    assert os.path.getsize(uploads / "games" / url.rsplit("/", 1)[1]) < len(big)
+
+
+def test_a_file_that_only_pretends_to_be_an_image_is_refused(game, staff_client, uploads):
+    editor = staff_client("editor", "content")
+    gid = CatalogGame.query.one().id
+    fake_png = b"\x89PNG\r\n\x1a\n" + b"not really an image" * 10
+    r = upload(editor, gid, fake_png)
+    assert r.status_code == 400 and "couldn't read" in r.get_json()["error"] and not (uploads / "games").exists()

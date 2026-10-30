@@ -478,12 +478,28 @@ def admin_game_thumbnail(gid):
     kind = _sniff_image(data[:16])
     if kind is None:
         return json_error("Upload a PNG, JPEG or WebP image.")
-    name = f"{uuid.uuid4().hex}.{kind}"
+    # Decode it for real (this also proves it is an image) and store a web-sized WebP: a 2 MB original would otherwise be
+    # downloaded on every game card.
+    import io
+    from PIL import Image, UnidentifiedImageError
+    Image.MAX_IMAGE_PIXELS = 40_000_000  # refuse decompression bombs
+    try:
+        im = Image.open(io.BytesIO(data))
+        im.load()
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, ValueError):
+        return json_error("We couldn't read that image. Try another PNG, JPEG or WebP.")
+    im = im.convert("RGBA" if "A" in im.getbands() else "RGB")
+    if im.width > 720:
+        im = im.resize((720, max(1, round(im.height * 720 / im.width))), Image.LANCZOS)
+    buf = io.BytesIO()
+    im.save(buf, "WEBP", quality=80, method=6)
+    optimized = buf.getvalue()
+    name = f"{uuid.uuid4().hex}.webp"
     with open(os.path.join(games_dir(), name), "wb") as out:
-        out.write(data)
+        out.write(optimized)
     old = game.image_url or ""
     game.image_url = f"/uploads/games/{name}"
-    audit("games.thumbnail", target=str(gid), detail={"bytes": len(data), "type": kind})
+    audit("games.thumbnail", target=str(gid), detail={"bytes_in": len(data), "bytes_stored": len(optimized), "type": kind})
     db.session.commit()
     if old.startswith("/uploads/games/"):  # tidy up the file we are replacing (name pattern is ours, so no path tricks)
         prev = old.rsplit("/", 1)[1]

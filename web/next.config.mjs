@@ -22,6 +22,11 @@ const nextConfig = {
   async headers() {
     return [
       {
+        // Site artwork never changes under the same name (replace an image by giving it a new file name): cache it for a year.
+        source: "/images/:path*",
+        headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+      },
+      {
         source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },

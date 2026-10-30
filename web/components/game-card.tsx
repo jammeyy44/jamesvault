@@ -11,11 +11,11 @@ type Props = {
 };
 
 const DEFAULT_COVERS = [
-  "/images/game_royal_vault.jpg",
-  "/images/game_estar.jpg",
-  "/images/game_royal_treasure.jpg",
-  "/images/game_yolo_wheel.jpg",
-  "/images/game_vblink.jpg",
+  "/images/game_royal_vault.webp",
+  "/images/game_estar.webp",
+  "/images/game_royal_treasure.webp",
+  "/images/game_yolo_wheel.webp",
+  "/images/game_vblink.webp",
 ];
 
 function getCover(game: Game) {

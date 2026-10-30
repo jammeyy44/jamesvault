@@ -170,3 +170,6 @@ Every new cashout request is posted to the support group (optionally into its ow
 
 ### Checking a payout at Paydora
 `python paydora_check.py` (from `GameAPI`, virtualenv active) lists the last cashouts with what the site recorded and what Paydora itself answers for each order (status, reference, times). Approved cashouts also show the Paydora reference in the Telegram message and in Admin -> Cashouts. If no key is set the site now turns payments OFF instead of using the fake test client (that client only exists when `JV_SANDBOX=true` and there is no key).
+
+### Images and speed
+Site artwork in `web/public/images` is WebP, sized for the screen (about 50-100 KB each) and cached by the browser for a year (`immutable`). To change an image, save the new one under a NEW file name, otherwise visitors keep the cached old one. Game thumbnails uploaded in Admin are decoded, shrunk to at most 720 px wide and stored as WebP automatically (needs `Pillow`, now in `requirements.txt`).

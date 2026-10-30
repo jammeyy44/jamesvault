@@ -41,3 +41,4 @@ redis==5.0.8
 beautifulsoup4==4.12.3
 2captcha-python==1.5.1
 gunicorn==22.0.0
+Pillow>=10.4,<13

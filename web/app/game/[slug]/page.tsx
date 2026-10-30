@@ -43,12 +43,12 @@ type RedeemPreview = {
 type RedeemResult = { status: string; payout: string; voided: string; note: string | null };
 
 const DEFAULT_COVERS: Record<string, string> = {
-  "royal-vault": "/images/game_royal_vault.jpg",
-  "estar": "/images/game_estar.jpg",
-  "royal-treasure": "/images/game_royal_treasure.jpg",
-  "yolo-lucky-wheel": "/images/game_yolo_wheel.jpg",
-  "vblink": "/images/game_vblink.jpg",
-  "game-vault": "/images/game_royal_vault.jpg",
+  "royal-vault": "/images/game_royal_vault.webp",
+  "estar": "/images/game_estar.webp",
+  "royal-treasure": "/images/game_royal_treasure.webp",
+  "yolo-lucky-wheel": "/images/game_yolo_wheel.webp",
+  "vblink": "/images/game_vblink.webp",
+  "game-vault": "/images/game_royal_vault.webp",
 };
 
 function getGameCover(game: { slug?: string; name: string; image_url: string | null }) {
@@ -124,7 +124,7 @@ export default function FullscreenGamePage() {
     slug,
     name: displayName,
     category: "Slots, Table Games",
-    image_url: DEFAULT_COVERS[slug] || "/images/game_royal_vault.jpg",
+    image_url: DEFAULT_COVERS[slug] || "/images/game_royal_vault.webp",
     status: "active",
   };
 
