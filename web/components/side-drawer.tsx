@@ -9,7 +9,8 @@ import {
   X, Home, Crown, Users, Headphones, LogOut, Wallet, Info, 
   Gamepad2, ShieldCheck, ChevronRight, Bell, LogIn, UserPlus, Gem 
 } from "lucide-react";
-import { OPEN_WALLET_EVENT } from "./wallet-panel";
+import { OPEN_WALLET_EVENT, WALLET_EVENT } from "./wallet-panel";
+import { api } from "@/lib/api";
 import { Logo } from "./logo";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,24 @@ export function SideDrawer({ open, onClose, balance }: SideDrawerProps) {
   const router = useRouter();
   const { player, logout, unread } = useAuth();
   const [mounted, setMounted] = useState(false);
+  const [bonus, setBonus] = useState<string | null>(null);
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [rules, setRules] = useState<{ table: { made: string; wallet: string }[]; note: string; min: string } | null>(null);
+
+  // Real bonus balance from the server, refreshed whenever the wallet changes.
+  useEffect(() => {
+    if (!player || !open) return;
+    let live = true;
+    const read = () => api<{ bonus_balance?: string }>("/wallet").then((r) => { if (live) setBonus(r.bonus_balance ?? "0.00"); }).catch(() => {});
+    read();
+    window.addEventListener(WALLET_EVENT, read);
+    return () => { live = false; window.removeEventListener(WALLET_EVENT, read); };
+  }, [player, open]);
+
+  const showBonusRules = () => {
+    setRulesOpen(true);
+    if (!rules) api<{ bonus: { table: { made: string; wallet: string }[]; note: string; min: string } }>("/cashout-rules").then((r) => setRules(r.bonus)).catch(() => {});
+  };
 
   useEffect(() => {
     setMounted(true);
@@ -148,7 +167,7 @@ export function SideDrawer({ open, onClose, balance }: SideDrawerProps) {
                       <div>
                         <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Balance</p>
                         <p className="text-base font-black text-white tabular-nums">
-                          ${balance !== null ? Number(balance).toFixed(2) : "19.00"}
+                          ${balance !== null ? Number(balance).toFixed(2) : "0.00"}
                         </p>
                       </div>
                     </div>
@@ -162,20 +181,21 @@ export function SideDrawer({ open, onClose, balance }: SideDrawerProps) {
                     </button>
                   </div>
 
-                  {/* Wager Row */}
+                  {/* Bonus balance row (the (i) explains the bonus cashout rule) */}
                   <div className="flex items-center justify-between rounded-xl bg-[#0B0E17]/60 p-2.5">
                     <div className="flex items-center gap-3">
                       <span className="grid h-8 w-8 place-items-center rounded-full bg-amber-500/20 text-amber-400 font-black text-sm">
                         $
                       </span>
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Wager</p>
-                        <p className="text-base font-black text-white tabular-nums">$19.00</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Bonus balance</p>
+                        <p className="text-base font-black text-white tabular-nums" data-testid="drawer-bonus">${bonus !== null ? Number(bonus).toFixed(2) : "0.00"}</p>
                       </div>
                     </div>
-                    <div className="grid h-7 w-7 place-items-center rounded-full text-slate-500">
+                    <button type="button" onClick={showBonusRules} aria-label="Bonus cashout rule" data-testid="drawer-bonus-info"
+                      className="grid h-8 w-8 place-items-center rounded-full text-slate-400 transition hover:bg-white/10 hover:text-white">
                       <Info className="h-4 w-4" />
-                    </div>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -273,6 +293,26 @@ export function SideDrawer({ open, onClose, balance }: SideDrawerProps) {
               )}
             </div>
           </motion.div>
+
+          {rulesOpen && (
+            <div className="fixed inset-0 z-[110] grid place-items-center overflow-y-auto bg-black/70 p-4" role="dialog" aria-modal="true" aria-label="Bonus cashout rule" data-testid="drawer-bonus-rules"
+              onMouseDown={(e) => { if (e.target === e.currentTarget) setRulesOpen(false); }}>
+              <div className="relative my-auto w-full max-w-sm rounded-3xl border border-white/10 bg-[#0B0F1A] p-5 text-white shadow-2xl">
+                <button onClick={() => setRulesOpen(false)} aria-label="Close" className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-400 transition hover:text-white"><X className="h-4 w-4" /></button>
+                <h3 className="pr-10 text-lg font-black">Bonus cashout rule</h3>
+                <p className="mt-2 text-sm text-slate-300">Your bonus balance is added to any game instantly from its <b>Add Cash</b> screen, with no approval needed. It can&apos;t be withdrawn directly.</p>
+                <div className="mt-3 rounded-2xl border border-[#ffd966]/30 bg-[#ffd966]/10 p-4 text-sm text-[#ffd966]">
+                  <p>If a game is funded <b>only by bonus</b>, its balance must reach <b>{rules?.min ?? "$60"}</b> to cash out, and your wallet is credited:</p>
+                  <table className="mt-2 w-full text-left">
+                    <thead className="text-[11px] font-extrabold uppercase tracking-wider text-[#ffd966]/70"><tr><th className="py-1">Game balance</th><th className="py-1">To wallet</th></tr></thead>
+                    <tbody>{(rules?.table ?? []).map((t) => <tr key={t.made} className="border-t border-[#ffd966]/20"><td className="py-1.5 font-bold">{t.made}</td><td className="py-1.5 font-bold text-emerald-300">{t.wallet}</td></tr>)}</tbody>
+                  </table>
+                  <p className="mt-2 text-xs text-[#ffd966]/80">{rules?.note ?? "The rest of the balance is not carried over."} If you add your own cash to a game, the regular cash table applies instead.</p>
+                </div>
+                <button onClick={() => setRulesOpen(false)} className="mt-4 h-11 w-full rounded-2xl bg-gradient-to-r from-[#3B82F6] to-[#8B5CF6] text-sm font-black text-white transition hover:brightness-110">Got it</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </AnimatePresence>,
