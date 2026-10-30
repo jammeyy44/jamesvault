@@ -17,6 +17,6 @@ def test_valid_or_pasted_values_become_a_clean_url(raw, expected):
     assert parse_redis_url(raw) == expected
 
 
-@pytest.mark.parametrize("raw", ["", "   ", "default:pw@host:6379", "--tls -u host", "http://example.com", "next-heron.upstash.io"])
+@pytest.mark.parametrize("raw", ["", "   ", "default:pw@host:6379", "--tls -u host", "http://example.com", "example.upstash.io"])
 def test_unusable_values_give_none_instead_of_crashing(raw):
     assert parse_redis_url(raw) is None
