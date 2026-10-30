@@ -318,6 +318,15 @@ def add_cash(slug):
     if prior:  # replay of the same request: return the original outcome, never apply twice
         return jsonify(_cash_view(prior))
 
+    # Rule: bonus only when the wallet is nearly empty (under $1), so real money is spent first.
+    if source == 'bonus' and _wallet_funded() and player.wallet_cents >= 100:
+        return json_error(f"Use your wallet balance first (${ledger.fmt(player.wallet_cents)}). "
+                          "Bonus balance can be used when your wallet is under $1.", 409, code="wallet_first")
+    # Rule: cash can only be added when the game balance is under $1 (never top up a game that still has money in it).
+    blocked = _game_balance_block(acct)
+    if blocked is not None:
+        return blocked
+
     if source == 'bonus' or _wallet_funded():
         return _add_cash_from_balance(player, game, acct, amount, key, source)
 
@@ -335,6 +344,29 @@ def add_cash(slug):
         prior = CashRequest.query.filter_by(player_id=player.id, idempotency_key=key).first()
         return jsonify(_cash_view(prior)) if prior else json_error("Please try again.", 409)
     return jsonify(_cash_view(req)), 201
+
+
+def _game_balance_block(acct):
+    """None when the game balance is under $1 (adding is allowed); otherwise the error response to return.
+    If the live balance cannot be read the answer is no: we never add cash on top of an unknown balance."""
+    gateway = get_gateway()
+    if gateway is None:
+        return None  # nothing to read (accounts disabled); the callers refuse earlier
+    try:
+        balance = Decimal(gateway.get_balance(acct))
+    except GatewayError as e:
+        reason = (getattr(e, "reason", None) or "").lower()
+        if "not found" in reason or reason.startswith("8:"):
+            return json_error("Your game login isn't recognised by the game. Remove it and get a new login, then try again.",
+                              409, code="login_not_found")
+        return json_error("We couldn't check your game balance, so cash was not added. Please try again in a minute.", 502, code="provider_error")
+    except Exception:
+        logger.exception("add_cash: balance check failed")
+        return json_error("We couldn't check your game balance, so cash was not added. Please try again in a minute.", 502, code="provider_error")
+    if balance >= Decimal("1"):
+        return json_error(f"Your game still has ${balance:.2f}. You can add cash again when the game balance is under $1.",
+                          409, code="game_has_balance", game_balance=f"{balance:.2f}")
+    return None
 
 
 def _add_cash_from_balance(player, game, acct, amount, key, bucket="wallet"):

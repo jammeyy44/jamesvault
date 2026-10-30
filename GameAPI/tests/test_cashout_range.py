@@ -118,6 +118,10 @@ def test_the_bonus_cash_out_credits_the_wallet_once_and_needs_confirmation(api, 
 class RefusingGateway:
     name = "live"
 
+    def get_balance(self, account):
+        from decimal import Decimal
+        return Decimal("0")
+
     def recharge(self, account, amount):
         from app.services.gateway import GatewayError
         err = GatewayError("The game provider could not complete that request. Please try again later.")

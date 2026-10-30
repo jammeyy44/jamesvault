@@ -654,9 +654,17 @@ function FullscreenLoginDetailsModal({
 function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () => void; onDone: () => void }) {
   const { min, max, quick } = state.cash;
   const wallet = num(state.wallet_balance), bonus = num(state.bonus_balance);
-  const bonusUsable = !!state.bonus_enabled && bonus > 0;
+  // Bonus is only usable when the wallet is nearly empty; the server enforces this too.
+  const walletBlocksBonus = !!state.wallet_funded && wallet >= 1;
+  const bonusUsable = !!state.bonus_enabled && bonus > 0 && !walletBlocksBonus;
   const lowWallet = !!state.wallet_funded && wallet < 1 && bonusUsable;
   const [source, setSource] = useState<"wallet" | "bonus">(lowWallet ? "bonus" : "wallet");
+  // Cash can only be added when the game balance is under $1; read it live (the server checks again).
+  const [gameBal, setGameBal] = useState<number | null>(null);
+  useEffect(() => {
+    api<{ balance: string }>(`/games/${state.game.slug}/balance`).then((r) => setGameBal(Number(r.balance))).catch(() => setGameBal(null));
+  }, [state.game.slug]);
+  const gameHasBalance = gameBal !== null && gameBal >= 1;
   const [amount, setAmount] = useState(lowWallet ? Math.min(10, bonus) : (quick[1] ?? 10));
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -688,12 +696,21 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
       {(state.wallet_funded || bonusUsable) && (
         <div role="group" aria-label="Pay with" className="mt-5 grid grid-cols-2 gap-1 rounded-2xl bg-white/5 border border-white/10 p-1">
           {([["wallet", "Wallet", state.wallet_funded ? money2(wallet) : null], ["bonus", "Bonus", money2(bonus)]] as const).map(([key, label, bal]) => (
-            <button key={key} onClick={() => setSource(key)} aria-pressed={source === key} disabled={key === "bonus" && !bonusUsable}
+            <button key={key} onClick={() => setSource(key)} aria-pressed={source === key} disabled={key === "bonus" && !bonusUsable} data-testid={`pay-${key}`}
               className={cn("rounded-xl px-3 py-2 text-xs sm:text-sm font-bold transition disabled:opacity-40", source === key ? (key === "bonus" ? "bg-[#ffd966] text-slate-950 font-black" : "bg-sky-400 text-slate-950 font-black") : "text-slate-300 hover:bg-white/10")}>
               {label}{bal && <span className="ml-1.5 font-extrabold">{bal}</span>}
             </button>
           ))}
         </div>
+      )}
+
+      {walletBlocksBonus && !!state.bonus_enabled && bonus > 0 && (
+        <p className="mt-2 text-center text-xs text-slate-400" data-testid="bonus-locked">Bonus can be used once your wallet is under $1.</p>
+      )}
+      {gameHasBalance && (
+        <p role="status" data-testid="game-has-balance" className="mt-4 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-3 text-xs text-amber-100">
+          Your game still has {money2(gameBal!)}. You can add cash again when the game balance is under $1.
+        </p>
       )}
 
       <p className="mt-5 text-center text-xs font-semibold text-slate-400">Amount{source === "bonus" ? " from bonus balance" : ""}</p>
@@ -739,7 +756,7 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
 
       <div className="mt-6 flex gap-3">
         <button className="flex-1 h-12 rounded-2xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-sm transition active:scale-95 shadow-md disabled:opacity-50"
-          onClick={submit} disabled={busy || !valid}>
+          onClick={submit} disabled={busy || !valid || gameHasBalance}>
           {busy ? <Spinner /> : null} Confirm Add Cash
         </button>
         <button className="h-12 px-6 rounded-2xl border border-white/10 bg-[#182035] hover:bg-[#1f2942] text-white font-bold text-sm transition"

@@ -5,7 +5,7 @@ import pytest
 
 from app import db
 from app.models_site import (
-    BonusBox, DepositBoost, PaymentOrder, Player, PlayerReward, WalletEntry,
+    BonusBox, CashRequest, DepositBoost, PaymentOrder, Player, PlayerReward, WalletEntry,
 )
 from app.services import bonus, wallet as ledger
 from app.utils.auth import utcnow
@@ -239,7 +239,9 @@ def test_bonus_cash_minimum_is_one_dollar_unless_it_is_the_whole_balance(api, ma
     assert api.post('/api/v1/games/game-vault/cash', {"amount": "1", "source": "bonus", "idempotency_key": KEY(2)}).status_code == 201
     assert bonus_bal(p["id"]) == 150
     assert api.post('/api/v1/games/game-vault/cash', {"amount": "0.80", "source": "bonus", "idempotency_key": KEY(3)}).status_code == 400
+    CashRequest.query.update({"status": "failed"}); db.session.commit()    # the game balance was used up: adding is allowed again
     assert api.post('/api/v1/games/game-vault/cash', {"amount": "1.50", "source": "bonus", "idempotency_key": KEY(4)}).status_code == 201
+    CashRequest.query.update({"status": "failed"}); db.session.commit()
     _grant_bonus(p["id"], 80)                                             # $0.80 left: allowed only as "everything"
     assert api.post('/api/v1/games/game-vault/cash', {"amount": "0.80", "source": "bonus", "idempotency_key": KEY(5)}).status_code == 201
     assert bonus_bal(p["id"]) == 0
@@ -350,3 +352,37 @@ def test_schema_sync_adds_missing_columns_without_touching_data(app):
     row = db.session.execute(text("SELECT wallet_cents, diamonds, bonus_cents FROM players WHERE username='keepme'")).one()
     assert tuple(row) == (1234, 7, 0)
     assert add_missing_columns() == []                                         # idempotent
+
+
+# ------------------------------------------------------------------ add-cash rules: empty game only, bonus only when the wallet is under $1
+def test_cash_cannot_be_added_while_the_game_still_has_a_balance(api, make_player, game, sandbox_wallet):
+    p = make_player(api)
+    _access(api)
+    _grant_bonus(p["id"], 1000)
+    assert api.post('/api/v1/games/game-vault/cash', {"amount": "5", "source": "bonus", "idempotency_key": KEY(1)}).status_code == 201
+    r = api.post('/api/v1/games/game-vault/cash', {"amount": "5", "source": "bonus", "idempotency_key": KEY(2)})
+    assert r.status_code == 409 and r.get_json()["code"] == "game_has_balance" and r.get_json()["game_balance"] == "5.00"
+    assert bonus_bal(p["id"]) == 500                                      # the blocked request charged nothing
+
+
+def test_adding_is_allowed_again_when_the_game_balance_is_under_a_dollar(api, make_player, game, sandbox_wallet):
+    p = make_player(api)
+    _access(api)
+    _grant_bonus(p["id"], 1000)
+    db.session.add(CashRequest(player_id=p["id"], game_account_id=1, amount="0.50", source="win", sandbox=True, status="completed",
+                               idempotency_key="under-a-dollar"))
+    db.session.commit()                                                   # game balance $0.50
+    assert api.post('/api/v1/games/game-vault/cash', {"amount": "5", "source": "bonus", "idempotency_key": KEY(3)}).status_code == 201
+
+
+def test_bonus_is_only_usable_when_the_wallet_is_under_a_dollar(api, make_player, game, sandbox_wallet):
+    p = make_player(api)
+    _access(api)
+    _grant_bonus(p["id"], 1000)
+    db.session.get(Player, p["id"]).wallet_cents = 500
+    db.session.commit()
+    r = api.post('/api/v1/games/game-vault/cash', {"amount": "5", "source": "bonus", "idempotency_key": KEY(4)})
+    assert r.status_code == 409 and r.get_json()["code"] == "wallet_first" and bonus_bal(p["id"]) == 1000
+    db.session.get(Player, p["id"]).wallet_cents = 99                     # $0.99: now the bonus may be used
+    db.session.commit()
+    assert api.post('/api/v1/games/game-vault/cash', {"amount": "5", "source": "bonus", "idempotency_key": KEY(5)}).status_code == 201
