@@ -112,3 +112,40 @@ def test_the_bonus_cash_out_credits_the_wallet_once_and_needs_confirmation(api, 
     assert db.session.get(Player, acct.player_id).wallet_cents == 1000
     again = api.post('/api/v1/games/game-vault/redeem', {"idempotency_key": "bonus-redeem-0001", "confirm_void": True})
     assert again.get_json()["payout"] == "10.00" and db.session.get(Player, acct.player_id).wallet_cents == 1000   # replay: not paid twice
+
+
+# ------------------------------------------------------------------ staff see why the game refused an add cash
+class RefusingGateway:
+    name = "live"
+
+    def recharge(self, account, amount):
+        from app.services.gateway import GatewayError
+        err = GatewayError("The game provider could not complete that request. Please try again later.")
+        err.reason = "13: Recharge permission denied"
+        raise err
+
+
+def test_staff_see_the_providers_reason_players_do_not(api, make_player, staff_client, monkeypatch, features):
+    from app.models_site import Player
+    features(sandbox=True)
+    g = CatalogGame(slug="game-vault", name="Game Vault", category="Slots")
+    db.session.add(g)
+    db.session.commit()
+    monkeypatch.setattr("app.routes.site.accounts.get_gateway", lambda: RefusingGateway())
+    results = {}
+    for who in ("player", "staff"):
+        if who == "player":
+            me = make_player(api)
+            client = api
+        else:
+            client = staff_client("boss", "superadmin")
+            me = {"id": Player.query.filter_by(username="boss").one().id}
+        db.session.add(GameAccount(player_id=me["id"], game_id=g.id, provider_username=f"gv_{who}", password_enc="x", status="active"))
+        db.session.get(Player, me["id"]).bonus_cents = 500
+        db.session.commit()
+        r = client.post('/api/v1/games/game-vault/cash', {"amount": "5", "source": "bonus", "idempotency_key": f"idem-{who}-0001"})
+        results[who] = r.get_json()
+        assert r.status_code == 201 and results[who]["status"] == "failed"
+        assert db.session.get(Player, me["id"]).bonus_cents == 500      # refunded
+    assert "reason" not in results["player"]
+    assert results["staff"]["reason"] == "13: Recharge permission denied"

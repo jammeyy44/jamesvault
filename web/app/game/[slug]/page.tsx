@@ -30,7 +30,7 @@ type Access = {
   bonus_min?: string;
 };
 
-type CashResult = { status: string; sandbox: boolean; amount: string; note: string | null; source?: "wallet" | "bonus" };
+type CashResult = { status: string; sandbox: boolean; amount: string; note: string | null; source?: "wallet" | "bonus"; reason?: string };
 type LimitsInfo = { table: { deposit: string; min: string; max: string }[]; note: string; bonus?: { table: { made: string; wallet: string }[]; note: string; min: string }; facts: { min_deposit: string; max_redeem: string; min_wallet_cashout: string } };
 
 /** Shown once, right after a login is created: the cashout rules, straight from the server's table. */
@@ -726,7 +726,7 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
         const held = done.status === "needs_review";
         const failed = done.status === "failed";
         const text = ok ? `${money2(done.amount)} added to the game${done.source === "bonus" ? " from your bonus balance" : ""}.`
-          : failed ? `The game could not add the cash, so nothing was charged: your ${from} is unchanged.${done.note ? ` (${done.note})` : ""}`
+          : failed ? `The game could not add the cash, so nothing was charged: your ${from} is unchanged.${done.reason ? ` Provider said: ${done.reason}` : done.note ? ` (${done.note})` : ""}`
           : held ? `Your funds are held while we confirm the credit with the game. Nothing is lost.`
           : `Request for ${money(done.amount)} received. It will be credited once our team confirms your payment.`;
         return (

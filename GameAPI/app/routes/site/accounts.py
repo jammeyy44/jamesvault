@@ -364,11 +364,13 @@ def _add_cash_from_balance(player, game, acct, amount, key, bucket="wallet"):
         return jsonify(_cash_view(prior)) if prior else json_error("Please try again.", 409)
 
     gateway = get_gateway()
+    reason = None
     try:
         gateway.recharge(acct, amount)
         req.status, req.note = 'completed', ("Sandbox: test credit" if req.sandbox else None)
     except GatewayError as e:  # refused before anything was applied: give the money back
         req.status, req.note = 'failed', str(e)[:300]
+        reason = getattr(e, "reason", None)  # the provider's own reason: shown to staff accounts only
         ledger.credit(player.id, cents, 'cash_refund', 'cash_request', req.id, bucket=bucket)
     except Exception:  # unknown outcome: keep the funds held for staff to reconcile
         logger.exception("recharge outcome unknown for cash request %s", req.id)
@@ -376,7 +378,10 @@ def _add_cash_from_balance(player, game, acct, amount, key, bucket="wallet"):
         req.note = "Provider outcome unknown. Our team is checking; your funds are held."
     req.processed_at = utcnow()
     db.session.commit()
-    return jsonify(_cash_view(req)), 201
+    view = _cash_view(req)
+    if reason and player.role != "player":
+        view["reason"] = str(reason)[:200]
+    return jsonify(view), 201
 
 
 def _cash_view(r):
