@@ -15,6 +15,7 @@ import { TiredOfLosingCard } from "@/components/free-spin-modal";
 import { TestYourLuckBanner } from "@/components/test-your-luck";
 import { CashoutLimitsModal } from "@/components/cashout-limits-modal";
 import { GameArt } from "@/components/game-art";
+import { Transactions } from "@/components/transactions";
 import { cn } from "@/lib/utils";
 
 type Access = {
@@ -402,17 +403,7 @@ export default function FullscreenGamePage() {
               <TestYourLuckBanner />
 
               {/* Transactions Container */}
-              <div className="min-h-[360px] rounded-3xl border border-white/10 bg-[#121829] p-8 flex flex-col items-center justify-center text-center shadow-xl">
-                <div className="grid h-16 w-16 place-items-center rounded-3xl bg-white/5 border border-white/10 text-slate-400 mb-3">
-                  <FileText className="h-8 w-8 stroke-[1.5]" />
-                </div>
-                <p className="text-base font-bold text-slate-300">
-                  Your transactions will be displayed here
-                </p>
-                <p className="text-xs text-slate-400 mt-1 max-w-sm">
-                  Recent deposits, redeems, and play sessions appear here automatically.
-                </p>
-              </div>
+              <Transactions />
             </div>
           </div>
         )}

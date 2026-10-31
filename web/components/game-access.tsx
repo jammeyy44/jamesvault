@@ -8,6 +8,7 @@ import { OPEN_WALLET_EVENT, notifyWalletChanged } from "./wallet-panel";
 import { TestYourLuckBanner } from "./test-your-luck";
 import { cn } from "@/lib/utils";
 import { GameArt } from "./game-art";
+import { Transactions } from "./transactions";
 
 type Access = {
   mode: "sandbox" | "live" | "disabled";
@@ -381,17 +382,7 @@ function GameDashboard({
         <TestYourLuckBanner />
 
         {/* Transactions area */}
-        <div className="min-h-[280px] rounded-2xl border border-white/10 bg-[#121829] p-8 flex flex-col items-center justify-center text-center">
-          <div className="grid h-16 w-16 place-items-center rounded-3xl bg-white/5 border border-white/10 text-slate-400 mb-3">
-            <FileText className="h-8 w-8 stroke-[1.5]" />
-          </div>
-          <p className="text-sm font-semibold text-slate-400">
-            Your transactions will be displayed here
-          </p>
-          <p className="text-xs text-slate-400 mt-1 max-w-xs">
-            Recent deposits, redeems, and play sessions appear here automatically.
-          </p>
-        </div>
+        <Transactions />
       </div>
     </div>
   );
