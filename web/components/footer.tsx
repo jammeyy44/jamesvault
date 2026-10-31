@@ -20,7 +20,7 @@ export function Footer() {
         {/* Navigation & brand links */}
         <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr] pb-10">
           <div>
-            <Logo />
+            <Logo size={72} />
             <p className="mt-4 max-w-sm text-sm text-slate-400">{brand.description}</p>
           </div>
           <nav aria-label="Explore">

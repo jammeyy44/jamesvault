@@ -31,8 +31,8 @@ def _body():
 
 
 def _password_problem(password, username=""):
-    if not isinstance(password, str) or len(password) < 10:
-        return "Password must be at least 10 characters."
+    if not isinstance(password, str) or len(password) < 6:
+        return "Password must be at least 6 characters."
     if len(password) > 128:
         return "Password is too long."
     if username and password.lower() == username.lower():

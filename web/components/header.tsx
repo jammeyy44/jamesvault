@@ -68,7 +68,7 @@ export function Header() {
     <header className="sticky top-0 z-40 border-b border-white/10 bg-[#0B0E17]/90 backdrop-blur-md">
       <div className="container-x flex h-16 items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Link href="/" aria-label="Home"><Logo /></Link>
+          <Link href="/" aria-label="Home"><Logo size={52} /></Link>
           <Link href="/bonus-zone"
             className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#7c3aed] to-[#4f46e5] px-3.5 py-1 text-xs font-black text-white shadow-[0_4px_16px_rgba(124,58,237,0.45)] border border-white/20 transition hover:scale-105 active:scale-95">
             💸 FREE CASH →

@@ -24,7 +24,7 @@ export function AuthShell({ title, subtitle, children, footer, badge }: AuthShel
         {/* Brand Logo Header */}
         <div className="mb-7 flex flex-col items-center">
           <Link href="/" className="transition hover:scale-105 active:scale-95" aria-label="Home">
-            <Logo />
+            <Logo size={72} />
           </Link>
         </div>
 

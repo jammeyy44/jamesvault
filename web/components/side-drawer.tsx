@@ -109,7 +109,7 @@ export function SideDrawer({ open, onClose, balance }: SideDrawerProps) {
             {/* Top Bar: Brand Logo + Close Button */}
             <div className="flex items-center justify-between px-5 pt-5 pb-3">
               <Link href="/" onClick={onClose} className="flex items-center gap-2 group">
-                <Logo />
+                <Logo size={48} />
               </Link>
               <button
                 type="button"

@@ -128,8 +128,8 @@ function RegisterForm() {
             placeholder="••••••••••••"
             autoComplete="new-password"
             required
-            minLength={10}
-            hint="At least 10 characters, mixing letters & numbers."
+            minLength={6}
+            hint="At least 6 characters, mixing letters & numbers."
             icon={<Lock className="h-4 w-4" />}
           />
 

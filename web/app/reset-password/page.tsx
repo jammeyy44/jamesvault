@@ -46,8 +46,8 @@ function ResetForm() {
       ) : (
         <form onSubmit={submit} className="space-y-4">
           {state && <Notice tone={state.tone}>{state.text}</Notice>}
-          <Field id="password" label="New password" type="password" autoComplete="new-password" required minLength={10} />
-          <Field id="confirm" label="Confirm new password" type="password" autoComplete="new-password" required minLength={10} />
+          <Field id="password" label="New password" type="password" autoComplete="new-password" required minLength={6} />
+          <Field id="confirm" label="Confirm new password" type="password" autoComplete="new-password" required minLength={6} />
           <Button type="submit" className="w-full" disabled={busy}>{busy ? "Saving…" : "Update password"}</Button>
         </form>
       )}

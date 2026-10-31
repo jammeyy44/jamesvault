@@ -237,7 +237,7 @@ function SecurityTab() {
         <form onSubmit={changePassword} className="space-y-4">
           {pw && <Notice tone={pw.tone}>{pw.text}</Notice>}
           <Field id="current" label="Current password" type="password" autoComplete="current-password" required />
-          <Field id="next" label="New password" type="password" autoComplete="new-password" required minLength={10} />
+          <Field id="next" label="New password" type="password" autoComplete="new-password" required minLength={6} />
           <Button type="submit">Update password</Button>
         </form>
       </Card>
