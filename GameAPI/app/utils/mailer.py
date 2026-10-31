@@ -23,8 +23,12 @@ def send_email(to, subject, body):
     msg["From"], msg["To"], msg["Subject"] = cfg["SMTP_FROM"], to, subject
     msg.set_content(body)
     try:
-        with smtplib.SMTP(cfg["SMTP_HOST"], cfg["SMTP_PORT"], timeout=10) as smtp:
-            smtp.starttls()
+        port = int(cfg["SMTP_PORT"])
+        # Port 465 is SSL from the first byte; 587 (and others) start plain and upgrade with STARTTLS.
+        client = smtplib.SMTP_SSL(cfg["SMTP_HOST"], port, timeout=15) if port == 465 else smtplib.SMTP(cfg["SMTP_HOST"], port, timeout=15)
+        with client as smtp:
+            if port != 465:
+                smtp.starttls()
             if cfg.get("SMTP_USER"):
                 smtp.login(cfg["SMTP_USER"], cfg["SMTP_PASSWORD"])
             smtp.send_message(msg)

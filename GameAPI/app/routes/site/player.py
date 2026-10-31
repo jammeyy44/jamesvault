@@ -201,8 +201,10 @@ def request_email_verification():
     audit("player.verify_email_requested")
     db.session.commit()
     link = f"{current_app.config['FRONTEND_URL'].rstrip('/')}/verify-email?token={raw}"
-    send_email(player.email, f"Confirm your {current_app.config['BRAND']['name']} email",
-               f"Confirm your email address (link valid for 24 hours):\n{link}\n\nIf you didn't ask for this, ignore this email.")
+    sent = send_email(player.email, f"Confirm your {current_app.config['BRAND']['name']} email",
+                      f"Confirm your email address (link valid for 24 hours):\n{link}\n\nIf you didn't ask for this, ignore this email.")
+    if not sent and current_app.config.get("JV_ENV") == "production":
+        return json_error("We couldn't send the email right now. Please try again later or contact support.", 503, code="email_unavailable")
     return jsonify({"message": "We've sent a confirmation link to your email."})
 
 
