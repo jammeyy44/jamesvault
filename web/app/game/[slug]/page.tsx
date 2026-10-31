@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft, Check, Copy, Download, Eye, EyeOff, FileText, FlaskConical, Gift, Info,
-  KeyRound, Pencil, RefreshCw, Sparkles, Trash2, X
+  ArrowLeft, ArrowRight, Check, Copy, Download, Eye, EyeOff, FileText, FlaskConical, Gift, Info,
+  KeyRound, Lock, MailCheck, Pencil, RefreshCw, Sparkles, Trash2, X
 } from "lucide-react";
 import { api, ApiError, errorMessage, type Game } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -634,20 +634,35 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
         <p className="mt-2 text-center text-xs text-slate-400" data-testid="bonus-locked">Bonus can be used once your wallet is under $1.</p>
       )}
       {gameHasBalance && (
-        <p role="status" data-testid="game-has-balance" className="mt-4 rounded-2xl border border-amber-300/25 bg-amber-300/10 p-3 text-xs text-amber-100">
-          Your game still has {money2(gameBal!)}. You can add cash again when the game balance is under $1.
-        </p>
+        <div role="status" data-testid="game-has-balance"
+          className="relative mt-5 overflow-hidden rounded-2xl border border-amber-300/25 bg-gradient-to-br from-[#2a2110] via-[#1b1a1c] to-[#14182a] p-4">
+          <div className="pointer-events-none absolute -right-8 -top-10 h-28 w-28 rounded-full bg-amber-400/20 blur-2xl" />
+          <div className="relative flex items-center gap-3.5">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-amber-500 text-slate-950 shadow-[0_6px_18px_rgba(251,191,36,0.35)]"><Lock className="h-5 w-5" strokeWidth={2.4} /></span>
+            <div className="min-w-0">
+              <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-amber-300/80">Game balance</p>
+              <p className="text-2xl font-black tabular-nums leading-tight text-white">{money2(gameBal!)}</p>
+            </div>
+            <p className="ml-auto max-w-[11rem] text-right text-[11px] leading-snug text-slate-300">You can add cash again once this game is under <b className="text-white">$1</b>.</p>
+          </div>
+        </div>
       )}
       {gameHasBalance && others.length > 0 && (
-        <div data-testid="switch-game" className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-3">
-          <p className="text-xs font-bold text-white">Want to add cash to a different game?</p>
-          <p className="mt-0.5 text-[11px] text-slate-400">Pick a game: its Add Cash screen opens right away (you will get a login first if you do not have one yet).</p>
-          <div className="mt-2.5 flex flex-wrap gap-2">
+        <div data-testid="switch-game" className="mt-3">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <p className="text-[11px] font-extrabold uppercase tracking-[0.14em] text-slate-400">Add cash to another game</p>
+            <p className="text-[10px] text-slate-500">Opens right away</p>
+          </div>
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {others.map((g) => (
               <Link key={g.slug} href={`/game/${g.slug}?add=1`}
-                className="inline-flex items-center gap-2 rounded-xl border border-sky-400/30 bg-sky-400/10 px-3 py-2 text-xs font-bold text-sky-300 transition hover:bg-sky-400/20">
-                <GameArt game={g} className="h-6 w-6 shrink-0 rounded-md [container-type:size]" />
-                {g.name}
+                className="group relative flex items-center gap-3 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.07] to-white/[0.02] p-3 transition hover:-translate-y-0.5 hover:border-sky-400/50 hover:shadow-[0_10px_28px_rgba(56,189,248,0.18)]">
+                <GameArt game={g} className="h-12 w-12 shrink-0 rounded-xl border border-white/15 shadow-md [container-type:size]" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-extrabold text-white">{g.name}</span>
+                  <span className="block text-[11px] font-semibold text-sky-300">Add cash here</span>
+                </span>
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sky-400/15 text-sky-300 transition group-hover:bg-sky-400 group-hover:text-slate-950"><ArrowRight className="h-4 w-4" /></span>
               </Link>
             ))}
           </div>
@@ -655,15 +670,34 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
       )}
 
       {state.cash_bonus && source === "wallet" && (
-        <div data-testid="cash-bonus-banner" className="mt-5 rounded-2xl border border-[#ffd966]/30 bg-gradient-to-br from-[#ffd966]/15 to-transparent p-3.5 text-xs text-[#ffe9a8]">
-          {!state.cash_bonus.email_verified ? (
-            <p><b className="text-[#ffd966]">Verify your email to unlock bonuses:</b> {state.cash_bonus.signup_percent}% signup bonus on the first cash you add to any one game, then {state.cash_bonus.regular_percent}% on every add after that. Bonus is added straight into your game. Verify it from your account page.</p>
-          ) : state.cash_bonus.kind === "signup" ? (
-            <p><b className="text-[#ffd966]">{state.cash_bonus.percent}% signup bonus</b> on this add (first cash added to any one game). It goes straight into your game. After this, every add earns {state.cash_bonus.regular_percent}% bonus.</p>
-          ) : (
-            <p><b className="text-[#ffd966]">{state.cash_bonus.percent}% bonus</b> on every cash add, credited straight into your game. (Your one-time {state.cash_bonus.signup_percent}% signup bonus is already used.)</p>
-          )}
-          <p className="mt-1 text-[11px] text-[#ffe9a8]/70">Bonus does not count towards your cashout range, and is not paid when you add from your bonus balance.</p>
+        <div data-testid="cash-bonus-banner" className="relative mt-5 overflow-hidden rounded-2xl border border-[#ffd966]/30 bg-gradient-to-br from-[#2b1d4d] via-[#1a1740] to-[#141a30] p-4">
+          <div className="pointer-events-none absolute -left-8 -top-10 h-32 w-32 rounded-full bg-fuchsia-500/20 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-10 -right-6 h-32 w-32 rounded-full bg-amber-400/15 blur-2xl" />
+          <div className="relative flex items-start gap-3.5">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#f472d0] to-[#a21caf] text-white shadow-[0_6px_18px_rgba(217,70,239,0.4)]"><Gift className="h-5 w-5" /></span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-black text-white">
+                {state.cash_bonus.kind === "signup" ? `${state.cash_bonus.percent}% signup bonus on this add` : `${state.cash_bonus.percent}% bonus on this add`}
+              </p>
+              <p className="mt-0.5 text-[12px] leading-snug text-slate-300">
+                {!state.cash_bonus.email_verified
+                  ? `Every add earns ${state.cash_bonus.regular_percent}%, credited straight into your game. Verify your email to also unlock the one-time ${state.cash_bonus.signup_percent}% signup bonus on your first add.`
+                  : state.cash_bonus.kind === "signup"
+                    ? "First cash you add to any one game. It goes straight into your game."
+                    : "Credited straight into your game. Your one-time signup bonus is already used."}
+              </p>
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <span className={cn("rounded-full border px-2.5 py-1 text-[11px] font-black", !state.cash_bonus.email_verified || state.cash_bonus.kind === "signup" ? "border-[#ffd966]/50 bg-[#ffd966]/15 text-[#ffd966]" : "border-white/10 bg-white/5 text-slate-400 line-through")}>+{state.cash_bonus.signup_percent}% first add</span>
+                <span className={cn("rounded-full border px-2.5 py-1 text-[11px] font-black", state.cash_bonus.kind === "regular" ? "border-[#ffd966]/50 bg-[#ffd966]/15 text-[#ffd966]" : "border-white/15 bg-white/5 text-slate-200")}>+{state.cash_bonus.regular_percent}% every add</span>
+                {!state.cash_bonus.email_verified && (
+                  <Link href="/dashboard" className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#ffd966] to-[#f59e0b] px-3.5 py-1.5 text-[11px] font-black text-slate-950 shadow-md transition hover:brightness-110 active:scale-95">
+                    <MailCheck className="h-3.5 w-3.5" /> Verify email
+                  </Link>
+                )}
+              </div>
+            </div>
+          </div>
+          <p className="relative mt-3 border-t border-white/10 pt-2.5 text-[10.5px] text-slate-400">Bonus does not count towards your cashout range and is not paid when adding from your bonus balance.</p>
         </div>
       )}
 

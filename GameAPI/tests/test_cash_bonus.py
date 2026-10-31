@@ -19,14 +19,15 @@ def _game_balance(api):
     return api.get('/api/v1/games/game-vault/balance').get_json()["balance"]
 
 
-def test_unverified_email_gets_no_bonus_and_is_told_to_verify(api, make_player, game, sandbox_wallet):
+def test_unverified_email_gets_the_regular_10_percent_and_is_told_to_verify_for_50(api, make_player, game, sandbox_wallet):
     p = make_player(api)
     _access(api)
     fund(p["id"], 5000)
     info = api.get('/api/v1/games/game-vault/access').get_json()["cash_bonus"]
-    assert info["email_verified"] is False and info["percent"] == 0 and info["signup_percent"] == 50 and info["regular_percent"] == 10
+    assert info["email_verified"] is False and info["percent"] == 10 and info["kind"] == "regular" and info["signup_percent"] == 50
     r = _cash(api, "20.00", 1).get_json()
-    assert r["bonus"] == "0.00" and _game_balance(api) == "20.00"
+    assert r["bonus"] == "2.00" and r["bonus_kind"] == "regular" and _game_balance(api) == "22.00"
+    assert db.session.get(Player, p["id"]).signup_bonus_claimed_at is None      # still available once the email is verified
 
 
 def test_verified_email_gets_50_percent_signup_bonus_straight_into_the_game(api, make_player, game, sandbox_wallet):

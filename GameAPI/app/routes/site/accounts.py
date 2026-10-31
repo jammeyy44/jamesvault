@@ -63,12 +63,11 @@ REGULAR_BONUS_PERCENT = 10
 
 
 def cash_bonus_info(player):
-    """What the player gets on top of the cash they add from their wallet. Needs a verified email."""
+    """What the player gets on top of the cash they add from their wallet: the one-time signup bonus (verified email only),
+    otherwise the regular bonus, which everybody earns on every add."""
     verified = bool(player.email_verified)
     signup_open = player.signup_bonus_claimed_at is None
-    if not verified:
-        percent, kind = 0, None
-    elif signup_open:
+    if verified and signup_open:
         percent, kind = SIGNUP_BONUS_PERCENT, "signup"
     else:
         percent, kind = REGULAR_BONUS_PERCENT, "regular"
@@ -412,10 +411,13 @@ def _add_cash_from_balance(player, game, acct, amount, key, bucket="wallet"):
         db.session.flush()
         ledger.debit(player.id, cents, 'cash_to_game', 'cash_request', req.id, bucket=bucket)
         bonus_amount = Decimal("0")
-        if bucket == "wallet" and player.email_verified:
-            # The signup bonus is claimed atomically (only one request can win it); everything after that earns the regular bonus.
-            won = Player.query.filter(Player.id == player.id, Player.signup_bonus_claimed_at.is_(None)).update(
-                {"signup_bonus_claimed_at": utcnow()}, synchronize_session=False)
+        if bucket == "wallet":
+            # The signup bonus (verified email) is claimed atomically: only one request can win it. Every other add from the
+            # wallet earns the regular bonus.
+            won = 0
+            if player.email_verified:
+                won = Player.query.filter(Player.id == player.id, Player.signup_bonus_claimed_at.is_(None)).update(
+                    {"signup_bonus_claimed_at": utcnow()}, synchronize_session=False)
             req.bonus_kind = "signup" if won == 1 else "regular"
             bonus_amount = _bonus_for(amount, SIGNUP_BONUS_PERCENT if won == 1 else REGULAR_BONUS_PERCENT)
             req.bonus_amount = bonus_amount
