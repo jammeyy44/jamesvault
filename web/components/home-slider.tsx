@@ -3,33 +3,21 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { ArrowUpRight, ChevronLeft, ChevronRight, Flame, Sparkles } from "lucide-react";
+import { ArrowUpRight, ChevronLeft, ChevronRight, Sparkles } from "lucide-react";
 import { SparkleField, TreasureScene } from "./art";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 
 const AUTOPLAY_MS = 7500;
 
 export function HomeSlider() {
   const reduce = useReducedMotion();
+  const { player } = useAuth();
+  const claimHref = !player ? "/register" : !player.email_verified ? "/dashboard" : "/games";
   const [index, setIndex] = useState(0);
   const [dir, setDir] = useState(1);
   const [paused, setPaused] = useState(false);
   const drag = useRef<number | null>(null);
-
-  // Live countdown timer state
-  const [timeLeft, setTimeLeft] = useState({ hours: 7, minutes: 59, seconds: 48 });
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
-        if (prev.minutes > 0) return { ...prev, minutes: 59, seconds: 59 };
-        if (prev.hours > 0) return { ...prev, hours: prev.hours - 1, minutes: 59, seconds: 59 };
-        return { hours: 23, minutes: 59, seconds: 59 };
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const totalSlides = 3;
 
@@ -89,41 +77,35 @@ export function HomeSlider() {
               <div className="relative z-20 w-[60%] sm:w-[58%] lg:w-[62%] max-w-2xl pb-2 sm:pb-4">
                 <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/15 border border-amber-400/30 px-2.5 py-0.5 text-[9px] sm:text-xs font-black text-amber-300 backdrop-blur-md mb-1.5 sm:mb-2 w-fit">
                   <Sparkles className="h-3 w-3 text-amber-300" />
-                  <span>WELCOME PASS</span>
+                  <span>WELCOME BONUS</span>
                 </div>
 
                 <h1 className="text-base xs:text-lg sm:text-2xl md:text-3xl lg:text-[2.25rem] xl:text-4xl font-black text-white leading-[1.12] tracking-tight drop-shadow-md">
-                  Double Your First{" "}
+                  Get +50% On Your{" "}
                   <br className="hidden xs:inline md:hidden" />
                   <span className="bg-gradient-to-r from-amber-300 via-yellow-200 to-amber-400 bg-clip-text text-transparent">
-                    Vault Deposit
+                    First Game Add
                   </span>
                 </h1>
 
                 <p className="mt-1 text-[11px] xs:text-xs sm:text-sm md:text-base font-extrabold text-sky-300 drop-shadow-sm">
-                  100% Match up to $2,500 + 150 Spins
+                  50% signup bonus, then 10% on every add
                 </p>
 
-                {/* Capsule Timer */}
-                <div className="mt-2 sm:mt-3 flex items-center gap-2">
-                  <div className="inline-flex items-center gap-1.5 rounded-xl bg-black/40 border border-amber-400/30 px-2 sm:px-3 py-1 backdrop-blur-md shadow-inner">
-                    <Flame className="h-3.5 w-3.5 text-amber-400 animate-bounce" />
-                    <span className="text-[8px] sm:text-[10px] font-bold text-slate-300 uppercase tracking-wider">
-                      CLOSES IN:
-                    </span>
-                    <span className="text-[10px] sm:text-xs font-black text-amber-300 tabular-nums">
-                      {String(timeLeft.hours).padStart(2, "0")}h {String(timeLeft.minutes).padStart(2, "0")}m {String(timeLeft.seconds).padStart(2, "0")}s
-                    </span>
-                  </div>
+                {/* How the bonus works */}
+                <div className="mt-2 sm:mt-3 flex flex-wrap items-center gap-1.5 sm:gap-2">
+                  <span className="inline-flex items-center rounded-xl bg-black/40 border border-amber-400/30 px-2 sm:px-3 py-1 text-[9px] sm:text-xs font-black text-amber-300 backdrop-blur-md">+50% first add</span>
+                  <span className="inline-flex items-center rounded-xl bg-black/40 border border-white/15 px-2 sm:px-3 py-1 text-[9px] sm:text-xs font-black text-slate-200 backdrop-blur-md">+10% every add</span>
+                  <span className="hidden xs:inline-flex items-center text-[9px] sm:text-[11px] font-semibold text-white/70">Verified email · goes straight into your game</span>
                 </div>
 
                 {/* Action buttons */}
                 <div className="mt-3 sm:mt-4 flex flex-wrap items-center gap-2 sm:gap-3">
                   <Link
-                    href="/bonus-zone"
+                    href={claimHref}
                     className="inline-flex items-center justify-center rounded-xl sm:rounded-2xl bg-gradient-to-r from-[#38bdf8] to-[#0ea5e9] hover:brightness-110 text-slate-950 font-black px-4 sm:px-6 py-2 sm:py-2.5 text-xs sm:text-sm shadow-[0_6px_20px_rgba(56,189,248,0.45)] transition hover:scale-105 active:scale-95"
                   >
-                    Claim Pass <ArrowUpRight className="h-3.5 w-3.5 ml-1 stroke-[3]" />
+                    Claim Bonus <ArrowUpRight className="h-3.5 w-3.5 ml-1 stroke-[3]" />
                   </Link>
 
                   <div className="hidden xs:flex items-center gap-1.5 text-[9px] sm:text-xs font-bold text-white/80">
