@@ -112,6 +112,7 @@ export default function FullscreenGamePage() {
     status: "active",
   };
 
+  useEffect(() => { try { localStorage.setItem("jv-last-game", slug); } catch { /* private mode */ } }, [slug]);
   const openedCash = useRef(false);
   useEffect(() => { openedCash.current = false; setStep("dashboard"); setAccess(null); }, [slug]); // switching game starts that game fresh
   useEffect(() => {

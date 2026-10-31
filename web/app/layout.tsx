@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { LiveOperator } from "@/components/live-operator";
+import { DepositSuccessPopup } from "@/components/deposit-success-popup";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { Header } from "@/components/header";
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <main id="main" className="min-h-[60vh]">{children}</main>
           <Footer />
           <LiveOperator />
+          <DepositSuccessPopup />
         </AuthProvider>
       </body>
     </html>
