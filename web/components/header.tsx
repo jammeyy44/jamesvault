@@ -23,6 +23,7 @@ export function Header() {
   const menuRef = useRef<HTMLDivElement>(null);
   const [walletOpen, setWalletOpen] = useState(false);
   const [balance, setBalance] = useState<string | null>(null);
+  const [bonusBal, setBonusBal] = useState<string>("0.00");
   const reduce = useReducedMotion();
   const [tipSeen, setTipSeen] = useState(true);  // true until we know, so the tip never flashes for someone who dismissed it
 
@@ -39,7 +40,7 @@ export function Header() {
     let live = true;
     // The light balance endpoint (no payment-provider call) is read straight away, every few seconds while the tab is visible,
     // whenever the wallet changes, and the moment the player comes back to the tab (e.g. after paying on the provider's page).
-    const read = () => { if (document.hidden) return; api<{ enabled: boolean; balance: string | null }>("/wallet/balance").then((r) => { if (live) setBalance(r.enabled ? r.balance : null); }).catch(() => {}); };
+    const read = () => { if (document.hidden) return; api<{ enabled: boolean; balance: string | null; bonus_balance?: string }>("/wallet/balance").then((r) => { if (live) { setBalance(r.enabled ? r.balance : null); setBonusBal(r.bonus_balance ?? "0.00"); } }).catch(() => {}); };
     read();
     const timer = setInterval(read, 4000);
     window.addEventListener(WALLET_EVENT, read);
@@ -62,6 +63,8 @@ export function Header() {
   }, []);
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  // With nothing in the wallet but some bonus balance, the chip shows the bonus (that is what the player can spend on games).
+  const showBonus = balance !== null && Number(balance) <= 0 && Number(bonusBal) > 0;
   const doLogout = async () => { await logout(); router.push("/"); };
 
   return (
@@ -99,9 +102,12 @@ export function Header() {
                   title="Add cash, cash out, history"
                   className="group flex h-11 cursor-pointer items-center gap-2.5 rounded-2xl border border-white/[0.07] bg-[#161C2C] py-1 pl-2.5 pr-1 transition hover:border-white/15 hover:bg-[#1A2236] active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-300"
                 >
-                  <span className="grid h-7 w-7 place-items-center rounded-full bg-[#1F3350] text-[13px] font-bold text-sky-300">$</span>
-                  <span className="min-w-[2.6rem] text-[15px] font-semibold tabular-nums text-slate-100" data-testid="header-balance">
-                    {balance !== null ? Number(balance).toFixed(2) : "0.00"}
+                  <span className={cn("grid h-7 w-7 place-items-center rounded-full text-[13px] font-bold", showBonus ? "bg-[#3a2f12] text-[#ffd966]" : "bg-[#1F3350] text-sky-300")}>$</span>
+                  <span className="flex min-w-[2.6rem] flex-col items-start leading-none">
+                    {showBonus && <span className="mb-0.5 text-[8px] font-extrabold uppercase tracking-[0.14em] text-[#ffd966]" data-testid="header-bonus-tag">Bonus</span>}
+                    <span className={cn("text-[15px] font-semibold tabular-nums", showBonus ? "text-[#ffe9a8]" : "text-slate-100")} data-testid="header-balance">
+                      {showBonus ? Number(bonusBal).toFixed(2) : balance !== null ? Number(balance).toFixed(2) : "0.00"}
+                    </span>
                   </span>
                   <span className="relative grid h-9 w-10 place-items-center rounded-xl bg-[#58B2F7] text-[#0B1B33] transition group-hover:bg-[#6FBFFA]">
                     {!tipSeen && !reduce && <span className="absolute inset-0 -z-10 animate-ping rounded-xl bg-sky-400/40" aria-hidden />}
