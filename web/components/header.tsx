@@ -63,8 +63,8 @@ export function Header() {
   }, []);
 
   const isActive = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
-  // With nothing in the wallet but some bonus balance, the chip shows the bonus (that is what the player can spend on games).
-  const showBonus = balance !== null && Number(balance) <= 0 && Number(bonusBal) > 0;
+  // With under $1 in the wallet and some bonus balance, the chip shows the bonus (that is what the player can spend on games).
+  const showBonus = balance !== null && Number(balance) < 1 && Number(bonusBal) > 0;
   const doLogout = async () => { await logout(); router.push("/"); };
 
   return (
