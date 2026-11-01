@@ -24,6 +24,12 @@ def to_cents(amount) -> int:
     return int((Decimal(str(amount)) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
 
+def whole_dollars(cents: int) -> int:
+    """What a deposit credits to the wallet: the amount paid rounded to the nearest whole dollar ($10.99 -> $11.00), because the
+    games only take whole-dollar loads. The payment itself is unchanged."""
+    return ((cents + 50) // 100) * 100
+
+
 def fmt(cents: int) -> str:
     return f"{(Decimal(cents) / 100).quantize(Decimal('0.01'))}"
 

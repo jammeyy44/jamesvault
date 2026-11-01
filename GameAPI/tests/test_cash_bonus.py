@@ -127,3 +127,25 @@ def test_admin_sees_everything_about_a_player(api, make_player, game, sandbox_wa
     assert "password" not in str(d).lower()
     # players cannot open it
     assert api.get(f'/api/v1/admin/players/{p["id"]}/profile').status_code == 403
+
+
+# ------------------------------------------------------------------ deposits are credited in whole dollars
+from tests.test_wallet import deposit, hook, pay  # noqa: E402,F401
+from app.models_site import PaymentOrder, WalletEntry  # noqa: E402
+from app.services import wallet as _ledger  # noqa: E402
+
+
+def test_whole_dollar_rounding_rule():
+    assert [_ledger.whole_dollars(c) for c in (999, 1099, 1199, 12499, 500, 1050, 1049)] == [1000, 1100, 1200, 12500, 500, 1100, 1000]
+
+
+def test_a_10_99_payment_puts_11_dollars_in_the_wallet_and_a_refund_takes_back_the_same(app, api, make_player, pay):
+    p = make_player(api)
+    deposit(api, 10.99, "m-card")
+    order = PaymentOrder.query.one()
+    assert hook(app, "deposit.paid", {"depositId": order.provider_deposit_id, "paidAmount": 10.99}, delivery="w-1").status_code == 200
+    assert db.session.get(Player, p["id"]).wallet_cents == 1100          # $11.00, not $10.99
+    assert db.session.get(PaymentOrder, order.id).amount_cents == 1100 and "10.99" in (db.session.get(PaymentOrder, order.id).note or "")
+    assert WalletEntry.query.filter_by(kind="deposit").one().amount_cents == 1100
+    hook(app, "deposit.refunded", {"depositId": order.provider_deposit_id, "refundAmount": 10.99}, delivery="w-2")
+    assert db.session.get(Player, p["id"]).wallet_cents == 0             # nothing left over

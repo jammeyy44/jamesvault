@@ -182,6 +182,7 @@ def create_deposit():
         # Direct-pay Chime: the provider creates nothing until money lands. Staff match the payment (see admin).
         order.note = "Direct Chime payment: confirmed when the payment arrives."
     if order.sandbox:
+        order.amount_cents = ledger.whole_dollars(order.amount_cents) or order.amount_cents  # whole dollars to the wallet
         ledger.credit(player.id, order.amount_cents, 'deposit', 'payment_order', order.id)
         order.status, order.paid_at = 'paid', utcnow()
         bonus.grant_deposit_bonus(order)

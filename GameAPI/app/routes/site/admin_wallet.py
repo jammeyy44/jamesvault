@@ -130,6 +130,7 @@ def admin_unmatched_resolve(did):
         player = Player.query.filter_by(username=str(d.get('username') or '').strip()).first()
         if not player or not row.amount_cents or row.event != 'deposit.paid' or not row.external_id:
             return json_error("Needs a valid username and a paid deposit.")
+        row.amount_cents = ledger.whole_dollars(row.amount_cents) or row.amount_cents  # whole dollars to the wallet
         try:
             ok = ledger.credit(player.id, row.amount_cents, 'deposit', 'webhook_deposit', row.external_id)
         except IntegrityError:

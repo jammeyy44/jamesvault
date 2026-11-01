@@ -234,8 +234,11 @@ function DepositPopup({ method, limits, boost, onBack, onDone }: { method: Metho
           <p className="mt-4 text-center text-xs text-white/45">Minimum {money(min)} · Maximum {money(max)}</p>
         )}
 
+        {valid && amount > 0 && Math.round(amount) !== amount && (
+          <p data-testid="rounding-note" className="mt-3 rounded-xl bg-emerald-400/10 px-3 py-2 text-center text-xs text-emerald-200">You pay <b>{money(amount)}</b> and <b>{money(Math.round(amount))}</b> is added to your wallet (whole dollars, so it loads straight into games).</p>
+        )}
         {boost && valid && amount > 0 && (() => {
-          const cents = Math.round(amount * 100);
+          const cents = Math.round(amount) * 100;  // the wallet gets whole dollars
           const extra = Math.floor((cents * boost.percent + 50) / 100);  // same rounding as the server
           return (
             <div data-testid="boost-preview" className="mt-4 rounded-2xl border border-[#ffd966]/30 bg-[#ffd966]/10 p-3 text-sm">

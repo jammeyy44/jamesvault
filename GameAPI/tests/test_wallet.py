@@ -234,7 +234,7 @@ def test_credit_uses_the_amount_that_actually_arrived(app, api, make_player, pay
     order = PaymentOrder.query.one()
     pay.deposit_paid = 24.5
     hook(app, "deposit.paid", {"depositId": order.provider_deposit_id}, delivery="d-3")
-    assert balance(p["id"]) == 2450
+    assert balance(p["id"]) == 2500   # the amount that arrived ($24.50), credited in whole dollars
 
 
 def test_failed_and_refunded_events(app, api, make_player, pay):
@@ -401,7 +401,7 @@ def test_add_cash_spends_wallet_funds_and_recharges(api, make_player, game, sand
     ok = api.post('/api/v1/games/game-vault/cash', {"amount": "10", "idempotency_key": KEY(2)})
     assert ok.status_code == 201 and ok.get_json()["status"] == "completed"
     assert balance(p["id"]) == 1500
-    assert api.get('/api/v1/games/game-vault/balance').get_json()["balance"] == "10.00"
+    assert api.get('/api/v1/games/game-vault/balance').get_json()["balance"] == "11.00"   # $10 cash + 10% regular bonus
     again = api.post('/api/v1/games/game-vault/cash', {"amount": "10", "idempotency_key": KEY(2)})
     assert again.get_json()["id"] == ok.get_json()["id"] and balance(p["id"]) == 1500  # replay never double-spends
 

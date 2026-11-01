@@ -108,10 +108,13 @@ def _handle(event, data, delivery):
             if not cents or cents <= 0:
                 delivery.handled, delivery.summary = False, "paid amount unreadable"
                 return None
+            paid_cents = cents
+            cents = ledger.whole_dollars(paid_cents) or paid_cents  # the wallet gets whole dollars ($10.99 paid -> $11.00)
             if ledger.credit(order.player_id, cents, 'deposit', 'payment_order', order.id):
                 order.status, order.paid_at = 'paid', utcnow()
                 if order.amount_cents != cents:
-                    order.note = f"Credited {ledger.fmt(cents)} (provider-reported amount)"
+                    order.note = (f"Paid {ledger.fmt(paid_cents)}, credited {ledger.fmt(cents)} (whole dollars)" if paid_cents != cents
+                                  else f"Credited {ledger.fmt(cents)} (provider-reported amount)")
                     order.amount_cents = cents
                 extra = bonus.grant_deposit_bonus(order)
                 bonus.grant_referral_bonus(order.player_id, cents, order)
@@ -136,6 +139,8 @@ def _handle(event, data, delivery):
                 delivery.handled, delivery.summary = False, f"refund for unknown deposit {dep_id}"
                 return None
             cents = _cents(data.get("refundAmount") or data.get("amount"))
+            if cents and cents > 0 and abs(cents - order.amount_cents) < 100:
+                cents = order.amount_cents  # the wallet was credited the rounded amount: take back the same
             if cents and cents > 0 and order.status in ('paid', 'refunded'):
                 # Recorded even if the player already spent it (balance may go negative: staff follow up).
                 if ledger.debit(order.player_id, cents, 'refund', 'payment_order', order.id, allow_negative=True):
