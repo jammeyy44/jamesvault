@@ -731,3 +731,13 @@ class OperatorAlias(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     telegram_user_id = db.Column(db.BigInteger, unique=True, nullable=False)
     number = db.Column(db.Integer, unique=True, nullable=False)
+
+
+class AppSetting(db.Model):
+    """Small admin-managed settings (e.g. the voice assistant's API key). Values are encrypted at rest."""
+    __tablename__ = 'app_settings'
+
+    key = db.Column(db.String(80), primary_key=True)
+    value = db.Column(EncryptedText, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=True)
+    updated_by = db.Column(db.Integer, nullable=True)

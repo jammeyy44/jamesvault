@@ -42,7 +42,7 @@ export function Spinner({ className }: { className?: string }) {
 }
 
 export function Notice({ tone = "info", children }: { tone?: "info" | "error" | "success"; children: React.ReactNode }) {
-  const tones = { info: "border-line bg-soft text-ink", error: "border-rose-400/30 bg-rose-500/10 text-rose-200", success: "border-success/40 bg-success/10 text-emerald-900" };
+  const tones = { info: "border-line bg-soft text-ink", error: "border-rose-400/30 bg-rose-500/10 text-rose-200", success: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" };
   return <div role={tone === "error" ? "alert" : "status"} className={cn("rounded-xl border px-4 py-3 text-sm", tones[tone])}>{children}</div>;
 }
 

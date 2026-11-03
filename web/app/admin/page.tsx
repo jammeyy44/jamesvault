@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   Activity, Banknote, BadgeCheck, Check, CreditCard, Disc3, Gamepad2, Gift, KeyRound, LayoutDashboard, LifeBuoy, Link2, LogOut, Pencil,
-  Percent, Plus, ScrollText, Server, ShieldCheck, Sparkles, Ticket, Trash2, UserPlus, Users, Wallet, X,
+  Mic, Percent, Plus, ScrollText, Server, ShieldCheck, Sparkles, Ticket, Trash2, UserPlus, Users, Wallet, X,
 } from "lucide-react";
 import { Badge, EmptyState, ErrorState, Notice, Skeleton } from "@/components/ui/bits";
 import { Button } from "@/components/ui/button";
@@ -73,12 +73,12 @@ const QUEUES: Record<string, { label: string; path: string; columns: string[]; a
 };
 
 const ROLE_TABS: Record<Exclude<Role, "player">, string[]> = {
-  superadmin: ["overview", "providers", "games", "promotions", "coupons", "wheel-prizes", "claims", "spins", "referrals", "cash-requests", "withdrawals", "payments", "unmatched", "payment-methods", "players", "tickets", "tokens", "provider-logs", "audit"],
+  superadmin: ["overview", "providers", "games", "promotions", "coupons", "wheel-prizes", "claims", "spins", "referrals", "cash-requests", "withdrawals", "payments", "unmatched", "payment-methods", "players", "tickets", "assistant", "tokens", "provider-logs", "audit"],
   content: ["overview", "games", "promotions", "wheel-prizes", "claims", "spins"],
   support: ["overview", "claims", "spins", "referrals", "players", "tickets"],
 };
 
-const labelFor = (k: string) => RESOURCES[k]?.label ?? QUEUES[k]?.label ?? ({ tickets: "Support tickets", coupons: "Coupons", tokens: "API tokens", providers: "Providers", overview: "Overview", unmatched: "Unmatched payments", "payment-methods": "Payment methods" } as Record<string, string>)[k] ?? k;
+const labelFor = (k: string) => RESOURCES[k]?.label ?? QUEUES[k]?.label ?? ({ tickets: "Support tickets", coupons: "Coupons", tokens: "API tokens", assistant: "Voice assistant", providers: "Providers", overview: "Overview", unmatched: "Unmatched payments", "payment-methods": "Payment methods" } as Record<string, string>)[k] ?? k;
 
 const NAV_GROUPS: [string, string[]][] = [
   ["Dashboard", ["overview"]],
@@ -86,12 +86,12 @@ const NAV_GROUPS: [string, string[]][] = [
   ["Queues", ["claims", "spins", "referrals"]],
   ["Money", ["cash-requests", "withdrawals", "payments", "unmatched", "payment-methods"]],
   ["People", ["players", "tickets"]],
-  ["System", ["tokens", "provider-logs", "audit"]],
+  ["System", ["assistant", "tokens", "provider-logs", "audit"]],
 ];
 const NAV_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   overview: LayoutDashboard, providers: Server, games: Gamepad2, promotions: Sparkles, coupons: Ticket, "wheel-prizes": Disc3,
   claims: BadgeCheck, spins: Gift, referrals: UserPlus, "cash-requests": Wallet, withdrawals: Banknote, payments: CreditCard,
-  unmatched: Link2, "payment-methods": Percent, players: Users, tickets: LifeBuoy, tokens: KeyRound, "provider-logs": Activity, audit: ScrollText,
+  assistant: Mic, unmatched: Link2, "payment-methods": Percent, players: Users, tickets: LifeBuoy, tokens: KeyRound, "provider-logs": Activity, audit: ScrollText,
 };
 
 // ---------------------------------------------------------------- page
@@ -157,7 +157,7 @@ export default function AdminPage() {
           </div>
         </nav>
         <section className="min-w-0">
-          {tab === "overview" ? <Overview /> : tab === "providers" ? <Providers /> : tab === "unmatched" ? <Unmatched /> : tab === "payment-methods" ? <PaymentMethods /> : RESOURCES[tab] ? <ResourceManager key={tab} name={tab} /> : tab === "tickets" ? <Tickets /> : tab === "coupons" ? <Coupons /> : tab === "tokens" ? <Tokens /> : QUEUES[tab] ? <Queue key={tab} name={tab} role={role} /> : null}
+          {tab === "overview" ? <Overview /> : tab === "providers" ? <Providers /> : tab === "unmatched" ? <Unmatched /> : tab === "payment-methods" ? <PaymentMethods /> : RESOURCES[tab] ? <ResourceManager key={tab} name={tab} /> : tab === "tickets" ? <Tickets /> : tab === "coupons" ? <Coupons /> : tab === "tokens" ? <Tokens /> : tab === "assistant" ? <AssistantSettings /> : QUEUES[tab] ? <Queue key={tab} name={tab} role={role} /> : null}
         </section>
       </div>
     </div>
@@ -400,6 +400,91 @@ function PlayerDetails({ id, onClose }: { id: number; onClose: () => void }) {
           <MiniTable title="People they referred" cols={[["at", "When"], ["username", "Player"], ["status", "Status"], ["reward", "Referral bonus"]]} rows={d.referrals} />
         </>)}
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- voice assistant key
+type AssistantView = { provider: string; providers: Record<string, { label: string; model: string; default_model: string; key_set: boolean; key_hint: string | null; source: string | null; prefix: string }> };
+
+function AssistantSettings() {
+  const [v, setV] = useState<AssistantView | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [provider, setProvider] = useState("nvidia");
+  const [model, setModel] = useState("");
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const load = useCallback(() => {
+    api<AssistantView>("/admin/assistant-settings").then((r) => { setV(r); setProvider(r.provider); setModel(r.providers[r.provider].model); }).catch((e) => setErr(errorMessage(e)));
+  }, []);
+  useEffect(load, [load]);
+  if (err) return <ErrorState message={err} onRetry={() => { setErr(null); load(); }} />;
+  if (!v) return <Skeleton className="h-60" />;
+  const cur = v.providers[provider];
+
+  const pick = (p: string) => { setProvider(p); setModel(v.providers[p].model); setKey(""); setMsg(null); };
+  const save = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api<AssistantView>("/admin/assistant-settings", { method: "PUT", body: { provider, model, api_key: key || undefined } });
+      setV(r); setKey(""); setMsg({ tone: "success", text: key ? "Saved. The key is stored encrypted and will not be shown again." : "Saved." });
+    } catch (e) { setMsg({ tone: "error", text: errorMessage(e) }); } finally { setBusy(false); }
+  };
+  const test = async () => {
+    setBusy(true); setMsg(null);
+    try { const r = await api<{ ok: boolean; message: string }>("/admin/assistant-settings/test", { method: "POST", body: { provider } }); setMsg({ tone: r.ok ? "success" : "error", text: r.message }); }
+    catch (e) { setMsg({ tone: "error", text: errorMessage(e) }); } finally { setBusy(false); }
+  };
+  const remove = async () => {
+    if (!confirm("Remove the saved key?")) return;
+    setBusy(true); setMsg(null);
+    try { setV(await api<AssistantView>(`/admin/assistant-settings/key?provider=${provider}`, { method: "DELETE" })); setMsg({ tone: "success", text: "Key removed." }); }
+    catch (e) { setMsg({ tone: "error", text: errorMessage(e) }); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-white/10 bg-[#0F1424] p-5 shadow-card sm:p-6">
+        <div className="flex items-start gap-3">
+          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#8B5CF6] to-[#4F46E5]"><Mic className="h-5 w-5 text-white" /></span>
+          <div>
+            <h3 className="text-lg font-extrabold">Voice assistant: AI provider</h3>
+            <p className="text-sm text-slate-400">Paste the API key here. It is stored encrypted, is never shown again, and is used only by the server. You can also set it in the server&apos;s <code>.env</code>; a key saved here takes priority.</p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <label className="block"><span className="label">Provider</span>
+            <select className="field" value={provider} onChange={(e) => pick(e.target.value)}>
+              {Object.entries(v.providers).map(([k, p]) => <option key={k} value={k}>{p.label}</option>)}
+            </select>
+          </label>
+          <label className="block"><span className="label">Model</span>
+            <input className="field" value={model} onChange={(e) => setModel(e.target.value)} placeholder={cur.default_model} spellCheck={false} autoComplete="off" />
+          </label>
+        </div>
+
+        <label className="mt-4 block"><span className="label">API key</span>
+          <input type="password" className="field font-mono" value={key} onChange={(e) => setKey(e.target.value)} autoComplete="new-password" spellCheck={false}
+            placeholder={cur.key_set ? `Saved (${cur.key_hint}). Paste a new key to replace it` : `Paste the key (starts with ${cur.prefix})`} />
+        </label>
+
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+          {cur.key_set
+            ? <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-xs font-bold text-emerald-300"><Check className="h-3.5 w-3.5" />Key set {cur.key_hint} · {cur.source === "admin" ? "saved here" : "from server .env"}</span>
+            : <span className="inline-flex rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-xs font-bold text-amber-300">No key yet</span>}
+        </p>
+
+        {msg && <div className="mt-4"><Notice tone={msg.tone}>{msg.text}</Notice></div>}
+
+        <div className="mt-5 flex flex-wrap gap-2">
+          <Button onClick={save} disabled={busy}>{busy ? "Working…" : "Save"}</Button>
+          <Button variant="secondary" onClick={test} disabled={busy || !cur.key_set}>Test connection</Button>
+          {cur.source === "admin" && <Button variant="danger" onClick={remove} disabled={busy}>Remove saved key</Button>}
+        </div>
+      </div>
+      <p className="px-1 text-xs text-slate-500">Tip: after saving, press Test connection. It sends one tiny request to the provider to confirm the key and model work. Rotate the key at the provider if it was ever shared in chat or email.</p>
     </div>
   );
 }
