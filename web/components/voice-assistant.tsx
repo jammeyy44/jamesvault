@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ClipboardCopy, Gift, Mic, Send, Volume2, VolumeX, X } from "lucide-react";
+import { Check, ClipboardCopy, Gift, Maximize2, Mic, Send, Volume2, VolumeX, X } from "lucide-react";
 import { OPEN_WALLET_EVENT, deviceId, notifyWalletChanged, requestWalletTab } from "./wallet-panel";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -11,7 +11,11 @@ import { cn } from "@/lib/utils";
 type Msg = { role: "user" | "assistant"; text: string };
 type Proposal =
   | { type: "deposit"; method_id: string; method_name: string; pay: string; credit: string; summary: string }
-  | { type: "add_cash"; slug: string; game: string; amount: string; source: "wallet" | "bonus"; bonus: string; bonus_percent: number; total: string; summary: string };
+  | { type: "add_cash"; slug: string; game: string; amount: string; source: "wallet" | "bonus"; bonus: string; bonus_percent: number; total: string; summary: string }
+  | { type: "create_login"; slug: string; game: string; summary: string }
+  | { type: "reset_password"; slug: string; game: string; summary: string }
+  | { type: "redeem_coupon"; code: string; summary: string }
+  | { type: "verify_email"; summary: string };
 type Action = { type: "navigate"; path: string } | { type: "open_wallet"; tab?: "deposit" | "cashout" };
 type Reply = { reply: string; proposals: Proposal[]; actions: Action[] };
 
@@ -20,6 +24,11 @@ const STORE_SPEAK = "jv-voice-speak";
 const STORE_LANG = "jv-voice-lang";
 const LANGS: [string, string][] = [["en-US", "English (US)"], ["en-IN", "English (India)"], ["en-GB", "English (UK)"], ["en-AU", "English (AU)"]];
 const STOP_WORDS = /^(stop|stop listening|that'?s all|that is all|goodbye|good bye|bye|bye bye|thanks bye|thank you bye|cancel listening)[.!\s]*$/i;
+
+/** Deposits and loading a game move money: those always need a tap. The rest can also be confirmed by saying yes. */
+const isMoney = (p: Proposal) => p.type === "deposit" || p.type === "add_cash";
+const YES = /^(yes|yeah|yep|yup|sure|ok|okay|confirm|confirmed|do it|go ahead|please do|correct|that'?s right|right)\b/i;
+const NO = /^(no|nope|nah|cancel|don'?t|do not|never mind|nevermind)\b/i;
 
 function speechRecognition(): any | null {
   if (typeof window === "undefined") return null;
@@ -43,6 +52,7 @@ export function VoiceAssistant() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [busy, setBusy] = useState(false);
   const [handsFree, setHandsFree] = useState(false);
+  const [mini, setMini] = useState(false);   // after opening a page the panel shrinks to a slim bar so the page stays visible
   const [lang, setLang] = useState("en-US");
   const handsFreeRef = useRef(false);
   const langRef = useRef("en-US");
@@ -52,6 +62,8 @@ export function VoiceAssistant() {
   const keyRef = useRef<string>("");
   const msgsRef = useRef<Msg[]>([]);
   const sendRef = useRef<(t: string) => Promise<void>>(async () => {});
+  const confirmRef = useRef<() => Promise<void>>(async () => {});
+  const cancelRef = useRef<() => void>(() => {});
   const endRef = useRef<HTMLDivElement>(null);
   const supported = typeof window !== "undefined" && !!speechRecognition();
 
@@ -99,7 +111,10 @@ export function VoiceAssistant() {
   const runAction = useCallback((a: Action) => {
     if (a.type === "open_wallet") { if (a.tab) requestWalletTab(a.tab); window.dispatchEvent(new CustomEvent(OPEN_WALLET_EVENT)); }
     else router.push(a.path);
+    setMini(true);   // let the player see the page; the microphone stays on
   }, [router]);
+
+  const pendingMoney = () => !!proposalRef.current && isMoney(proposalRef.current);
 
   const stopAll = useCallback(() => {
     handsFreeRef.current = false; setHandsFree(false); retriesRef.current = 0;
@@ -131,7 +146,7 @@ export function VoiceAssistant() {
       setListening(false);
       failed = true;
       if (e.error === "no-speech" && handsFreeRef.current) {   // silence while hands-free: wait a little, then give up politely
-        if (retriesRef.current < 2) { retriesRef.current += 1; setTimeout(() => { if (handsFreeRef.current && !proposalRef.current) startListening(); }, 300); }
+        if (retriesRef.current < 2) { retriesRef.current += 1; setTimeout(() => { if (handsFreeRef.current && !pendingMoney()) startListening(); }, 300); }
         else { stopAll(); add("assistant", "I'll stop listening now. Tap the mic whenever you're ready."); }
         return;
       }
@@ -151,8 +166,8 @@ export function VoiceAssistant() {
       const said = finalText.trim();
       setHeard("");
       if (said.length > 1) { retriesRef.current = 0; void sendRef.current(said); }
-      else if (!failed && handsFreeRef.current && !proposalRef.current) {   // ended without hearing anything: listen again a couple of times
-        if (retriesRef.current < 2) { retriesRef.current += 1; setTimeout(() => { if (handsFreeRef.current && !proposalRef.current) startListening(); }, 300); }
+      else if (!failed && handsFreeRef.current && !pendingMoney()) {   // ended without hearing anything: listen again a couple of times
+        if (retriesRef.current < 2) { retriesRef.current += 1; setTimeout(() => { if (handsFreeRef.current && !pendingMoney()) startListening(); }, 300); }
         else { stopAll(); add("assistant", "I'll stop listening now. Tap the mic whenever you're ready."); }
       }
     };
@@ -161,7 +176,7 @@ export function VoiceAssistant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const keepListening = () => { if (handsFreeRef.current && !proposalRef.current && supported) startListening(); };
+  const keepListening = () => { if (handsFreeRef.current && !pendingMoney() && supported) startListening(); };
 
   const send = async (said: string) => {
     const clean = said.trim().slice(0, 300);
@@ -172,6 +187,11 @@ export function VoiceAssistant() {
       stopAll(); add("assistant", line); speak(line);
       return;
     }
+    const pend = proposalRef.current;
+    if (pend && !isMoney(pend)) {   // "yes" / "no" answers a pending login, password, coupon or email card
+      if (YES.test(clean)) { setMsgs((m) => [...m, { role: "user", text: clean }]); void confirmRef.current(); return; }
+      if (NO.test(clean)) { setMsgs((m) => [...m, { role: "user", text: clean }]); cancelRef.current(); return; }
+    }
     const next: Msg[] = [...msgsRef.current, { role: "user", text: clean }];
     setMsgs(next);
     setText("");
@@ -180,8 +200,8 @@ export function VoiceAssistant() {
     try {
       const r = await api<Reply>("/assistant/chat", { method: "POST", body: { messages: next.slice(-8).map((m) => ({ role: m.role, content: m.text })) } });
       add("assistant", r.reply);
-      if (r.proposals[0]) { keyRef.current = crypto.randomUUID(); proposalRef.current = r.proposals[0]; setProposal(r.proposals[0]); }
-      r.actions.forEach(runAction);
+      if (r.proposals[0]) { keyRef.current = crypto.randomUUID(); proposalRef.current = r.proposals[0]; setProposal(r.proposals[0]); setMini(false); }
+      else r.actions.forEach(runAction);
       speak(r.reply, keepListening);
     } catch (e) {
       const m = errorMessage(e);
@@ -209,6 +229,25 @@ export function VoiceAssistant() {
           const line = o.status === "paid" ? `Done. ${money(o.amount)} is in your wallet.` : "Your deposit is created. The wallet updates when the payment is confirmed.";
           add("assistant", line); speak(line, keepListening); notifyWalletChanged();
         }
+      } else if (proposal.type === "create_login") {
+        await api(`/games/${proposal.slug}/access`, { method: "POST" });
+        setProposal(null); proposalRef.current = null;
+        const line = `Done. Your ${proposal.game} login is ready. I opened the game page: your username and password are on the screen. I can't read passwords out loud.`;
+        add("assistant", line); router.push(`/game/${proposal.slug}`); setMini(true); speak(line, keepListening);
+      } else if (proposal.type === "reset_password") {
+        await api(`/games/${proposal.slug}/access/reset-password`, { method: "POST" });
+        setProposal(null); proposalRef.current = null;
+        const line = `Done. Your ${proposal.game} password was reset. The new one is on the game page. I can't read passwords out loud.`;
+        add("assistant", line); router.push(`/game/${proposal.slug}`); setMini(true); speak(line, keepListening);
+      } else if (proposal.type === "redeem_coupon") {
+        const r = await api<{ amount: string }>("/coupons/redeem", { method: "POST", body: { code: proposal.code } });
+        setProposal(null); proposalRef.current = null;
+        const line = `Done. The coupon ${proposal.code} added ${money(r.amount)} to your bonus balance.`;
+        add("assistant", line); speak(line, keepListening); notifyWalletChanged();
+      } else if (proposal.type === "verify_email") {
+        const r = await api<{ message: string }>("/auth/verify-email/request", { method: "POST" });
+        setProposal(null); proposalRef.current = null;
+        add("assistant", r.message); speak(r.message, keepListening);
       } else {
         const r = await api<{ status: string; amount: string; bonus?: string; note?: string | null }>(`/games/${proposal.slug}/cash`, {
           method: "POST", body: { amount: proposal.amount, source: proposal.source, idempotency_key: keyRef.current },
@@ -238,7 +277,9 @@ export function VoiceAssistant() {
     setCopied(true); setTimeout(() => setCopied(false), 1800);
   };
   const toggleSpeak = () => { const n = !speakOn; setSpeakOn(n); if (!n) stopSpeaking(); try { localStorage.setItem(STORE_SPEAK, n ? "1" : "0"); } catch { /* ignore */ } };
-  const toggleOpen = () => { if (open) stopAll(); setOpen(!open); };
+  const toggleOpen = () => { if (open) stopAll(); setMini(false); setOpen(!open); };
+  confirmRef.current = confirm;
+  cancelRef.current = cancel;
   const micTap = () => {
     if (listening || handsFree) { stopAll(); return; }
     handsFreeRef.current = true; retriesRef.current = 0; setHandsFree(true); startListening();   // one tap starts a hands-free conversation
@@ -250,7 +291,23 @@ export function VoiceAssistant() {
 
   return (
     <>
-      {open && (
+      {open && mini && (
+        <section aria-label="Voice assistant (minimised)" data-testid="voice-mini"
+          className="fixed bottom-4 left-[4.75rem] right-[4.75rem] z-[60] flex max-w-md items-center gap-2.5 rounded-2xl border border-white/10 bg-[#0E1424]/95 px-3 py-2 text-white shadow-[0_12px_32px_rgba(0,0,0,0.55)] backdrop-blur sm:left-[6rem]">
+          <button type="button" onClick={micTap} aria-label={listening || handsFree ? "Stop listening" : "Start listening"} disabled={!supported || thinking}
+            className={cn("relative grid h-10 w-10 shrink-0 place-items-center rounded-full text-white disabled:opacity-40", listening ? "bg-rose-500" : handsFree ? "bg-emerald-500" : "bg-gradient-to-br from-[#e879f9] to-[#6366f1]")}>
+            {listening && <span className="absolute inset-0 animate-ping rounded-full bg-rose-400/50" aria-hidden />}
+            <Mic className="relative h-4 w-4" />
+          </button>
+          <div className="min-w-0 flex-1" onClick={stopSpeaking}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-fuchsia-300">{hint}</p>
+            <p className="line-clamp-2 text-xs leading-snug text-slate-200">{heard || [...msgs].reverse().find((m) => m.role === "assistant")?.text || "Anything else?"}</p>
+          </div>
+          <button onClick={() => setMini(false)} aria-label="Show the full assistant" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-slate-300 hover:bg-white/10"><Maximize2 className="h-4 w-4" /></button>
+          <button onClick={toggleOpen} aria-label="Close assistant" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button>
+        </section>
+      )}
+      {open && !mini && (
         <section role="dialog" aria-label="Voice assistant" data-testid="voice-panel"
           className="fixed bottom-24 left-3 z-[48] flex h-[min(34rem,calc(100vh-8rem))] w-[calc(100vw-1.5rem)] max-w-sm flex-col overflow-hidden rounded-3xl border border-white/10 bg-[#0E1424] text-white shadow-[0_24px_60px_rgba(0,0,0,0.6)] sm:left-5">
           <header className="flex items-center gap-3 border-b border-white/10 bg-gradient-to-r from-[#3b1a5c] to-[#1b2352] px-4 py-3">
@@ -271,9 +328,9 @@ export function VoiceAssistant() {
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3.5 text-[13px] leading-relaxed text-slate-300">
                 Tap the mic and ask, for example:
                 <ul className="mt-1.5 space-y-1 text-slate-200">
-                  <li>“What&apos;s my balance?”</li><li>“I want to deposit twenty five dollars on card”</li><li>“Load ten dollars in Game Vault”</li><li>“What can I cash out on Game Vault?”</li><li>“Take me to the bonus zone”</li>
+                  <li>“What&apos;s my balance?”</li><li>“I want to deposit twenty five dollars on card”</li><li>“Load ten dollars in Game Vault”</li><li>“Create my Juwa login” or “reset my Game Vault password”</li><li>“What can I cash out on Game Vault?”</li><li>“Take me to the bonus zone”</li>
                 </ul>
-                <p className="mt-2 text-[11px] text-slate-500">Tap the mic once and just keep talking; say “stop” when you're done. I always ask you to confirm before any money moves. If I mishear you, pick your accent at the top.</p>
+                <p className="mt-2 text-[11px] text-slate-500">Tap the mic once and just keep talking; say “stop” when you're done. I always ask you to confirm first: say “yes” for logins and passwords, tap Confirm for money. If I mishear you, pick your accent at the top.</p>
               </div>
             )}
             {msgs.map((m, i) => (

@@ -227,3 +227,54 @@ def test_withdraw_opens_the_wallet_withdrawal_tab_and_markdown_is_stripped(api, 
     assert r["actions"] == [{"type": "open_wallet", "tab": "cashout"}]
     assert r["reply"] == "Opened your wallet. Enter your payout details." and "*" not in r["reply"]
     assert plain("- **Game Vault**: _$5_\n- `Juwa`") == "Game Vault: $5 Juwa"
+
+
+# ------------------------------------------------------------------ logins, passwords, coupons, email: always a confirm card first
+def test_create_login_is_proposed_only_when_there_is_none(api, make_player, game, sandbox_wallet, ai):
+    make_player(api)
+    ai(call("propose_create_login", game="game vault"), say("Please confirm."))
+    prop = ask(api, "create my game vault login").get_json()["proposals"][0]
+    assert prop["type"] == "create_login" and prop["slug"] == "game-vault" and "never read aloud" in prop["summary"]
+    from app.models_site import GameAccount
+    assert GameAccount.query.count() == 0                                   # nothing created until the player confirms
+    _access(api)
+    ai(call("propose_create_login", game="game vault"), say("You already have one."))
+    r = ask(api, "create my game vault login again").get_json()
+    assert r["proposals"] == [] and r["actions"] == [{"type": "navigate", "path": "/game/game-vault"}]
+
+
+def test_reset_password_is_proposed_only_for_an_existing_login_and_never_reveals_it(api, make_player, game, sandbox_wallet, ai):
+    from app.services.assistant import t_get_login_name, t_propose_reset_password
+    p = make_player(api)
+    player = db.session.get(Player, p["id"])
+    assert "no login" in t_propose_reset_password(player, "game vault")["error"]
+    _access(api)
+    res = t_propose_reset_password(player, "game vault")
+    assert res["proposal"]["type"] == "reset_password" and res["proposal"]["slug"] == "game-vault"
+    from app.models_site import GameAccount
+    from app.utils.crypto import decrypt_secret
+    acct = GameAccount.query.one()
+    secret = decrypt_secret(acct.password_enc)
+    assert secret not in str(res) and secret not in str(t_get_login_name(player, "game vault"))
+    assert t_get_login_name(player, "game vault")["username"] == acct.provider_username
+
+
+def test_coupon_and_verify_email_proposals(api, make_player, ai):
+    from app.services.assistant import t_propose_redeem_coupon, t_propose_verify_email
+    p = make_player(api)
+    player = db.session.get(Player, p["id"])
+    assert t_propose_redeem_coupon(player, " hello-5! ")["proposal"]["code"] == "HELLO-5"
+    assert "valid coupon" in t_propose_redeem_coupon(player, "!")["error"]
+    assert t_propose_verify_email(player)["proposal"]["type"] == "verify_email"
+    verified(p["id"])
+    assert "already verified" in t_propose_verify_email(db.session.get(Player, p["id"]))["error"]
+
+
+def test_recent_activity_lists_what_happened(api, make_player, game, sandbox_wallet, ai):
+    from app.services.assistant import t_get_recent_activity
+    p = make_player(api)
+    _access(api)
+    fund(p["id"], 5000)
+    api.post('/api/v1/games/game-vault/cash', {"amount": "10.00", "source": "wallet", "idempotency_key": "idem-act-0000001"})
+    lines = t_get_recent_activity(db.session.get(Player, p["id"]))["latest_first"]
+    assert any("added $10.00" in l and "Game Vault" in l for l in lines)

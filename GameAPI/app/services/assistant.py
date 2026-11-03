@@ -38,6 +38,18 @@ TOOLS = [
      "parameters": {"type": "object", "properties": {"game": {"type": "string"}, "amount": {"type": "number", "description": "Dollars to load"},
                                                       "source": {"type": "string", "enum": ["wallet", "bonus"], "description": "Where the money comes from; default wallet"}},
                     "required": ["game", "amount"]}},
+    {"name": "propose_create_login", "description": "Prepare creating the player's login (username and password) on a game, for the player to confirm. Use when they ask for credentials, a login, access, or to start playing a game they have no login on.",
+     "parameters": {"type": "object", "properties": {"game": {"type": "string"}}, "required": ["game"]}},
+    {"name": "propose_reset_password", "description": "Prepare a new password for the player's existing game login, for the player to confirm. Use when they forgot or want to change their game password.",
+     "parameters": {"type": "object", "properties": {"game": {"type": "string"}}, "required": ["game"]}},
+    {"name": "get_login_name", "description": "The player's game login username (never the password). The password is shown only on the game page.",
+     "parameters": {"type": "object", "properties": {"game": {"type": "string"}}, "required": ["game"]}},
+    {"name": "propose_redeem_coupon", "description": "Prepare redeeming a coupon code, for the player to confirm. Spell the code back to the player.",
+     "parameters": {"type": "object", "properties": {"code": {"type": "string"}}, "required": ["code"]}},
+    {"name": "propose_verify_email", "description": "Prepare sending the player a confirmation email so they can verify their address (needed for the 50% first-add bonus).",
+     "parameters": {"type": "object", "properties": {}}},
+    {"name": "get_recent_activity", "description": "The player's latest deposits, cash added to games, game cashouts and withdrawals with their status. Use for 'did my deposit arrive', 'what did I do lately'.",
+     "parameters": {"type": "object", "properties": {}}},
     {"name": "navigate", "description": "Open a part of the website for the player.",
      "parameters": {"type": "object", "properties": {
          "target": {"type": "string", "enum": ["home", "games", "wallet", "wallet_withdraw", "bonus_zone", "refer", "support", "dashboard", "cashout_rules", "game"]},
@@ -230,6 +242,84 @@ def t_propose_add_cash(player, game, amount, source="wallet"):
     return {"proposal": proposal, "tell_the_player": "The confirmation card is on screen. Ask them to confirm."}
 
 
+def _login_game(player, game):
+    """(game, account, error) for the login tools."""
+    from app.routes.site.accounts import _provider_off
+    g, err = _find_game(game)
+    if err:
+        return None, None, err
+    if g.status == "maintenance" or _provider_off(g):
+        return g, None, f"{g.name} is under maintenance right now. Please try again later."
+    if get_gateway() is None:
+        return g, None, "Game logins are not available yet."
+    return g, _account(player, g), None
+
+
+def t_propose_create_login(player, game):
+    g, acct, err = _login_game(player, game)
+    if err:
+        return {"error": err}
+    if acct:
+        return {"error": f"They already have a login on {g.name}: the username is {acct.provider_username}. They can see the password on the game page, or you can offer to reset it.",
+                "action": {"type": "navigate", "path": f"/game/{g.slug}"}}
+    proposal = {"type": "create_login", "slug": g.slug, "game": g.name,
+                "summary": f"Create your {g.name} login (username and password). The password will be shown on the {g.name} page, never read aloud."}
+    return {"proposal": proposal, "tell_the_player": "The confirmation card is on screen. Ask them to confirm."}
+
+
+def t_propose_reset_password(player, game):
+    g, acct, err = _login_game(player, game)
+    if err:
+        return {"error": err}
+    if not acct:
+        return {"error": f"They have no login on {g.name} yet. Offer to create one."}
+    proposal = {"type": "reset_password", "slug": g.slug, "game": g.name,
+                "summary": f"Reset the password of your {g.name} login ({acct.provider_username}). The old password stops working and the new one is shown on the {g.name} page, never read aloud."}
+    return {"proposal": proposal, "tell_the_player": "The confirmation card is on screen. Ask them to confirm."}
+
+
+def t_get_login_name(player, game):
+    g, err = _find_game(game)
+    if err:
+        return {"error": err}
+    acct = _account(player, g)
+    if not acct:
+        return {"error": f"They have no login on {g.name} yet."}
+    return {"game": g.name, "username": acct.provider_username, "note": "The password is only shown on the game page; I cannot read it out."}
+
+
+def t_propose_redeem_coupon(player, code):
+    import re
+    c = re.sub(r"[^A-Za-z0-9_-]", "", str(code or "")).upper()
+    if not (3 <= len(c) <= 40):
+        return {"error": "I didn't catch a valid coupon code. Please spell it out."}
+    proposal = {"type": "redeem_coupon", "code": c, "summary": f"Redeem the coupon code {c}. Check the code is exactly right, then confirm."}
+    return {"proposal": proposal, "tell_the_player": "The confirmation card is on screen. Read the code back and ask them to confirm."}
+
+
+def t_propose_verify_email(player):
+    if player.email_verified:
+        return {"error": "Their email is already verified."}
+    proposal = {"type": "verify_email", "summary": f"Send a confirmation email to {player.email}. Open it and tap the link to verify."}
+    return {"proposal": proposal, "tell_the_player": "The confirmation card is on screen. Ask them to confirm."}
+
+
+def t_get_recent_activity(player):
+    from app.models_site import CashRequest, PaymentOrder, RedeemRequest, WithdrawalOrder
+    rows = []
+    for o in PaymentOrder.query.filter_by(player_id=player.id).order_by(PaymentOrder.id.desc()).limit(4):
+        rows.append((o.created_at, f"deposit {_money(Decimal(o.amount_cents) / 100)} by {o.method_name}: {o.status}"))
+    for c in CashRequest.query.filter_by(player_id=player.id).order_by(CashRequest.id.desc()).limit(4):
+        extra = f" plus {_money(c.bonus_amount)} bonus" if c.bonus_amount and Decimal(c.bonus_amount) > 0 else ""
+        rows.append((c.created_at, f"added {_money(c.amount)}{extra} to {c.account.game.name} from the {c.source}: {c.status}"))
+    for r in RedeemRequest.query.filter_by(player_id=player.id).order_by(RedeemRequest.id.desc()).limit(3):
+        rows.append((r.created_at, f"cashed out {r.account.game.name} to the wallet, {_money(Decimal(r.payout_cents) / 100)} paid: {r.status}"))
+    for w in WithdrawalOrder.query.filter_by(player_id=player.id).order_by(WithdrawalOrder.id.desc()).limit(3):
+        rows.append((w.created_at, f"withdrawal {_money(Decimal(w.amount_cents) / 100)} via {w.method_name}: {w.status}"))
+    rows.sort(key=lambda x: x[0], reverse=True)
+    return {"latest_first": [f"{t:%b %d %H:%M} UTC: {text}" for t, text in rows[:8]] or ["no activity yet"]}
+
+
 def t_navigate(player, target, game=None, screen="play"):
     if target == "wallet":
         return {"action": {"type": "open_wallet"}}
@@ -260,6 +350,18 @@ def run_tool(player, name, args):
             return t_propose_deposit(player, args.get("amount"), args.get("method"))
         if name == "propose_add_cash":
             return t_propose_add_cash(player, args.get("game"), args.get("amount"), args.get("source") or "wallet")
+        if name == "propose_create_login":
+            return t_propose_create_login(player, args.get("game"))
+        if name == "propose_reset_password":
+            return t_propose_reset_password(player, args.get("game"))
+        if name == "get_login_name":
+            return t_get_login_name(player, args.get("game"))
+        if name == "propose_redeem_coupon":
+            return t_propose_redeem_coupon(player, args.get("code"))
+        if name == "propose_verify_email":
+            return t_propose_verify_email(player)
+        if name == "get_recent_activity":
+            return t_get_recent_activity(player)
         if name == "navigate":
             return t_navigate(player, args.get("target"), args.get("game"), args.get("screen") or "play")
     except Exception:
@@ -353,6 +455,15 @@ Rules of the site:
 - Other features you can explain briefly: referral bonus (a friend's first deposit earns the referrer $10 bonus balance), the Bonus Zone (tasks that earn diamonds, boxes), Test Your Luck (3, 4 or 5 deposits without a cashout earn 5, 8 or 15 diamonds), free spin, coupons. If unsure of any detail say you are not sure and offer to open the page.
 
 Speech recognition is imperfect and may mishear words (for example "game vault" as "game wall", "cash out" as "cash app", numbers like fifteen and fifty). Interpret generously using context. If an amount, a game or a payment method is unclear, ask a short question instead of guessing, and always say the amount back before proposing.
+
+Everything you can do for the player (use these, do not say you can't if a tool fits):
+- answer questions about balances, bonuses, rules, cashout ranges, recent activity;
+- open any page or a game's play / add-cash / cash-out screen (navigate);
+- deposit (propose_deposit), load a game (propose_add_cash), create a game login (propose_create_login), reset a game password (propose_reset_password), redeem a coupon (propose_redeem_coupon), send the verification email (propose_verify_email); each only shows a confirm card;
+- tell their game username (get_login_name). You can NEVER read a password out loud or see one: after creating or resetting, the password appears on the game page, so say "it's on the screen".
+Games on the site: {', '.join(g.name for g in CatalogGame.query.filter(CatalogGame.status != 'hidden').order_by(CatalogGame.sort_order).limit(12))}.
+When you open a page or screen for the player, say what you opened in a few words and then ask "anything else?", because the microphone stays on.
+If the request is vague ("help me", "I want to play"), ask what they want and offer two or three choices. If it is a feature we don't have, say so plainly and point to Help and Support.
 
 How to act:
 - Use tools for anything you are not sure of. Never invent balances or rules.
