@@ -101,8 +101,15 @@ export function VoiceAssistant() {
     };
     rec.onerror = (e: any) => {
       setListening(false);
-      if (e.error === "not-allowed" || e.error === "service-not-allowed") add("assistant", "The microphone is blocked. Allow it in your browser settings, or type instead.");
-      else if (e.error !== "no-speech" && e.error !== "aborted") add("assistant", "I couldn't hear that. Try again or type.");
+      const why: Record<string, string> = {
+        "not-allowed": "The microphone is blocked. Allow it for this site in your browser settings, or type instead.",
+        "service-not-allowed": "This browser doesn't allow voice input here. Try Chrome or Safari, or type instead.",
+        "network": "Voice recognition couldn't reach its speech service. Check your connection, or note that Brave and some privacy browsers block it. Try Chrome, or type instead.",
+        "audio-capture": "I can't find a working microphone on this device. Check it is plugged in and not used by another app, or type instead.",
+        "language-not-supported": "Voice recognition doesn't support this language setting. Type instead.",
+        "no-speech": "I didn't hear anything. Tap the mic and speak right after it turns red.",
+      };
+      if (e.error !== "aborted") add("assistant", why[e.error] ?? `Voice input stopped (${e.error ?? "unknown"}). Try again or type.`);
     };
     rec.onend = () => {
       setListening(false);
