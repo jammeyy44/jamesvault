@@ -24,6 +24,10 @@ MAX_ROUNDS = 4
 TOOLS = [
     {"name": "get_game_balance", "description": "Read the live balance of the player's login on one game.",
      "parameters": {"type": "object", "properties": {"game": {"type": "string", "description": "Game name or slug, e.g. Game Vault"}}, "required": ["game"]}},
+    {"name": "get_cashout_info", "description": "Exact cashout facts for the player's login on a game: the latest cash added to it, the minimum and maximum they can cash out, the current game balance, and whether cashing out is possible now.",
+     "parameters": {"type": "object", "properties": {"game": {"type": "string"}}, "required": ["game"]}},
+    {"name": "cashout_range_for", "description": "Calculate the cashout range (minimum and maximum) for a hypothetical amount of cash added to a game, from the official table. Use for 'if I deposit 20, what can I cash out?'.",
+     "parameters": {"type": "object", "properties": {"cash_added": {"type": "number", "description": "Dollars of the player's own cash added to the game"}}, "required": ["cash_added"]}},
     {"name": "list_deposit_methods", "description": "List the payment methods and the amounts each accepts for a deposit.",
      "parameters": {"type": "object", "properties": {}}},
     {"name": "propose_deposit", "description": "Prepare a deposit for the player to confirm. Only call it when you know the amount AND the method.",
@@ -65,6 +69,12 @@ def _find_game(name):
     games = CatalogGame.query.filter(CatalogGame.status != "hidden").all()
     exact = [g for g in games if g.slug.lower() == name or g.name.lower() == name]
     hits = exact or [g for g in games if name in g.name.lower() or name.replace(" ", "-") in g.slug.lower()]
+    if not hits:  # speech-to-text often mishears names ("game volt", "jewa two"): fall back to the closest sounding name
+        import difflib
+        squash = lambda t: "".join(ch for ch in t.lower() if ch.isalnum())
+        by_name = {squash(g.name): g for g in games}
+        close = difflib.get_close_matches(squash(name), list(by_name), n=2, cutoff=0.62)
+        hits = [by_name[c] for c in close[:1]]
     if len(hits) == 1:
         return hits[0], None
     if not hits:
@@ -91,6 +101,43 @@ def t_get_game_balance(player, game):
         return {"game": g.name, "balance": _money(gw.get_balance(acct))}
     except Exception:
         return {"error": f"Could not read the {g.name} balance right now."}
+
+
+def t_get_cashout_info(player, game):
+    from app.routes.site.redeem import _preview
+    g, err = _find_game(game)
+    if err:
+        return {"error": err}
+    acct = _account(player, g)
+    if not acct:
+        return {"error": f"The player has no login on {g.name} yet."}
+    pv = _preview(player, g, acct)
+    added = pv.get("added") or {}
+    out = {"game": g.name, "cash_added_since_last_cashout": _money(added.get("cash", 0)), "bonus_added_since_last_cashout": _money(added.get("bonus", 0)),
+           "latest_cash_added_that_sets_the_range": _money(pv["latest_deposit"]) if pv.get("latest_deposit") else None,
+           "game_balance": _money(pv["game_balance"]) if pv.get("game_balance") is not None else None, "can_cash_out_now": bool(pv.get("can_redeem")),
+           "reason_if_not": pv.get("reason")}
+    if pv.get("rule"):
+        out["cashout_minimum"], out["cashout_maximum"] = _money(pv["rule"]["min"]), _money(pv["rule"]["max"])
+    if pv.get("mode") == "bonus":
+        out["note"] = "This game was funded only by bonus: the balance must reach $60, then the wallet gets $10 for $60 to $90 or $20 for $91 and above."
+    if pv.get("payout") is not None:
+        out["would_receive_in_wallet"] = _money(pv["payout"])
+        if pv.get("voided") and Decimal(pv["voided"]) > 0:
+            out["amount_above_the_maximum_that_would_be_voided"] = _money(pv["voided"])
+    return out
+
+
+def t_cashout_range_for(player, cash_added):
+    from app.services import cashout_rules as rules
+    a = _amount(cash_added)
+    if a is None:
+        return {"error": "I need a dollar amount."}
+    rule = rules.limits(ledger.to_cents(a))
+    if rule is None:
+        return {"error": "Cash added under $5 does not unlock cashing out."}
+    return {"cash_added": _money(a), "cashout_minimum": _money(Decimal(rule["min_cents"]) / 100), "cashout_maximum": _money(Decimal(rule["max_cents"]) / 100),
+            "note": "Anything won above the maximum is voided by the system. Bonus added to the game does not count towards the range."}
 
 
 def _deposit_methods():
@@ -201,6 +248,10 @@ def run_tool(player, name, args):
     try:
         if name == "get_game_balance":
             return t_get_game_balance(player, args.get("game"))
+        if name == "get_cashout_info":
+            return t_get_cashout_info(player, args.get("game"))
+        if name == "cashout_range_for":
+            return t_cashout_range_for(player, args.get("cash_added"))
         if name == "list_deposit_methods":
             return t_list_deposit_methods(player)
         if name == "propose_deposit":
@@ -235,6 +286,13 @@ Rules of the site:
 - Bonus balance can be loaded into a game only when the wallet is under $1.
 - Cashing out needs the game's cashout screen; you can open it but you cannot cash out yourself. Withdrawals to a payout method are done in the wallet.
 - Minimum add cash {_money(cfg['CASH_MIN'])}, maximum {_money(cfg['CASH_MAX'])}.
+- CASHOUT RANGE (cashing out a game's balance into the wallet): it is decided by the LATEST CASH THE PLAYER ADDED TO THAT GAME (their own cash; bonus does not count; under $5 unlocks nothing). The table is:
+  cash added $5 -> minimum $50, maximum $50; $5 to $9 -> minimum $50, maximum $100; $10 to $16 -> minimum $50, maximum 12 times the cash added; $17 to $25 -> minimum 3 times, maximum 12 times; $26 to $30 -> minimum 3 times, maximum 12 times; above $30 -> minimum 3 times, maximum 12 times with a hard cap of $500.
+  Everything above the maximum is voided. One cashout per cash added; to cash out again, add cash to the game again. A game funded only by bonus needs a $60 balance, then the wallet gets $10 (for $60 to $90) or $20 ($91 and above).
+  For a specific game or a what-if question ALWAYS call get_cashout_info or cashout_range_for and read the numbers from it; do not do the arithmetic yourself.
+- Other features you can explain briefly: referral bonus (a friend's first deposit earns the referrer $10 bonus balance), the Bonus Zone (tasks that earn diamonds, boxes), Test Your Luck (3, 4 or 5 deposits without a cashout earn 5, 8 or 15 diamonds), free spin, coupons. If unsure of any detail say you are not sure and offer to open the page.
+
+Speech recognition is imperfect and may mishear words (for example "game vault" as "game wall", "cash out" as "cash app", numbers like fifteen and fifty). Interpret generously using context. If an amount, a game or a payment method is unclear, ask a short question instead of guessing, and always say the amount back before proposing.
 
 How to act:
 - Use tools for anything you are not sure of. Never invent balances or rules.

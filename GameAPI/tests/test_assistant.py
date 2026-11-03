@@ -163,3 +163,35 @@ def test_audit_log_never_stores_what_was_said(api, make_player, ai):
     ask(api, "my secret words are pineapple")
     rows = " ".join(str(l.detail) for l in AuditLog.query.filter_by(action="assistant.chat").all())
     assert "pineapple" not in rows
+
+
+# ------------------------------------------------------------------ exact cashout facts and misheard names
+def test_cashout_range_for_a_what_if_amount_comes_from_the_official_table(api, make_player, ai):
+    from app.services.assistant import t_cashout_range_for
+    p = make_player(api)
+    player = db.session.get(Player, p["id"])
+    assert t_cashout_range_for(player, 20) == {"cash_added": "$20.00", "cashout_minimum": "$60.00", "cashout_maximum": "$240.00",
+                                               "note": "Anything won above the maximum is voided by the system. Bonus added to the game does not count towards the range."}
+    assert t_cashout_range_for(player, 7)["cashout_minimum"] == "$50.00" and t_cashout_range_for(player, 7)["cashout_maximum"] == "$100.00"
+    assert t_cashout_range_for(player, 100)["cashout_maximum"] == "$500.00"                      # the $500 cap
+    assert "under $5" in t_cashout_range_for(player, 3)["error"]
+
+
+def test_cashout_info_reads_the_games_own_range(api, make_player, game, sandbox_wallet, ai):
+    from app.services.assistant import t_get_cashout_info
+    p = make_player(api)
+    _access(api)
+    fund(p["id"], 5000)
+    api.post('/api/v1/games/game-vault/cash', {"amount": "20.00", "source": "wallet", "idempotency_key": "idem-voice-0001"})
+    info = t_get_cashout_info(db.session.get(Player, p["id"]), "game vault")
+    assert info["latest_cash_added_that_sets_the_range"] == "$20.00"
+    assert info["cashout_minimum"] == "$60.00" and info["cashout_maximum"] == "$240.00"          # not the bonus-inflated game balance
+
+
+def test_misheard_game_names_still_find_the_game(api, make_player, game, sandbox_wallet):
+    from app.services.assistant import _find_game
+    make_player(api)
+    for said in ("game vault", "game volt", "Game Vault", "gamevault", "game wault"):
+        g, err = _find_game(said)
+        assert g is not None and g.slug == "game-vault", said
+    assert _find_game("zzzzzz")[0] is None

@@ -17,6 +17,9 @@ type Reply = { reply: string; proposals: Proposal[]; actions: Action[] };
 
 const money = (v: string | number) => `$${Number(v).toFixed(2)}`;
 const STORE_SPEAK = "jv-voice-speak";
+const STORE_LANG = "jv-voice-lang";
+const LANGS: [string, string][] = [["en-US", "English (US)"], ["en-IN", "English (India)"], ["en-GB", "English (UK)"], ["en-AU", "English (AU)"]];
+const STOP_WORDS = /^(stop|stop listening|that'?s all|that is all|goodbye|good bye|bye|bye bye|thanks bye|thank you bye|cancel listening)[.!\s]*$/i;
 
 function speechRecognition(): any | null {
   if (typeof window === "undefined") return null;
@@ -39,6 +42,12 @@ export function VoiceAssistant() {
   const [heard, setHeard] = useState("");
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [busy, setBusy] = useState(false);
+  const [handsFree, setHandsFree] = useState(false);
+  const [lang, setLang] = useState("en-US");
+  const handsFreeRef = useRef(false);
+  const langRef = useRef("en-US");
+  const retriesRef = useRef(0);
+  const proposalRef = useRef<Proposal | null>(null);
   const recRef = useRef<any>(null);
   const keyRef = useRef<string>("");
   const msgsRef = useRef<Msg[]>([]);
@@ -47,7 +56,16 @@ export function VoiceAssistant() {
   const supported = typeof window !== "undefined" && !!speechRecognition();
 
   msgsRef.current = msgs;
-  useEffect(() => { try { setSpeakOn(localStorage.getItem(STORE_SPEAK) !== "0"); } catch { /* ignore */ } }, []);
+  proposalRef.current = proposal;
+  handsFreeRef.current = handsFree;
+  langRef.current = lang;
+  useEffect(() => {
+    try { setSpeakOn(localStorage.getItem(STORE_SPEAK) !== "0"); } catch { /* ignore */ }
+    let l = "en-US";
+    try { l = localStorage.getItem(STORE_LANG) || ""; } catch { /* ignore */ }
+    if (!LANGS.some(([c]) => c === l)) l = LANGS.find(([c]) => c === navigator.language)?.[0] ?? "en-US";   // follow the phone's English (e.g. India) by default
+    setLang(l);
+  }, []);
   useEffect(() => {
     if (!player) { setEnabled(false); return; }
     api<{ enabled: boolean }>("/assistant/status").then((r) => setEnabled(r.enabled)).catch(() => setEnabled(false));
@@ -66,10 +84,13 @@ export function VoiceAssistant() {
       u.voice = voices.find((v) => /^en/i.test(v.lang) && /natural|google|samantha|aria|jenny/i.test(v.name)) ?? voices.find((v) => /^en/i.test(v.lang)) ?? null;
       u.lang = u.voice?.lang ?? "en-US";
       u.rate = 1.04;
+      let done = false;
+      const finish = () => { if (done) return; done = true; setSpeaking(false); then?.(); };
       u.onstart = () => setSpeaking(true);
-      u.onend = () => { setSpeaking(false); then?.(); };
-      u.onerror = () => { setSpeaking(false); then?.(); };
+      u.onend = finish;
+      u.onerror = finish;
       window.speechSynthesis.speak(u);
+      setTimeout(finish, 2500 + line.length * 90);   // some mobile browsers never report the end of speech
     } catch { then?.(); }
   }, [speakOn]);
 
@@ -80,16 +101,23 @@ export function VoiceAssistant() {
     else router.push(a.path);
   }, [router]);
 
+  const stopAll = useCallback(() => {
+    handsFreeRef.current = false; setHandsFree(false); retriesRef.current = 0;
+    try { recRef.current?.abort(); } catch { /* ignore */ }
+    stopSpeaking(); setListening(false); setHeard("");
+  }, []);
+
   const startListening = useCallback(() => {
     const SR = speechRecognition();
     if (!SR) { add("assistant", "Your browser can't listen. Please type instead."); return; }
     stopSpeaking();
     try { recRef.current?.abort(); } catch { /* ignore */ }
     const rec = new SR();
-    rec.lang = "en-US";
+    rec.lang = langRef.current;
     rec.interimResults = true;
     rec.continuous = false;
     let finalText = "";
+    let failed = false;
     rec.onstart = () => { setListening(true); setHeard(""); };
     rec.onresult = (e: any) => {
       let interim = "";
@@ -101,6 +129,13 @@ export function VoiceAssistant() {
     };
     rec.onerror = (e: any) => {
       setListening(false);
+      failed = true;
+      if (e.error === "no-speech" && handsFreeRef.current) {   // silence while hands-free: wait a little, then give up politely
+        if (retriesRef.current < 2) { retriesRef.current += 1; setTimeout(() => { if (handsFreeRef.current && !proposalRef.current) startListening(); }, 300); }
+        else { stopAll(); add("assistant", "I'll stop listening now. Tap the mic whenever you're ready."); }
+        return;
+      }
+      if (e.error !== "aborted" && e.error !== "no-speech") { handsFreeRef.current = false; setHandsFree(false); }
       const why: Record<string, string> = {
         "not-allowed": "The microphone is blocked. Allow it for this site in your browser settings, or type instead.",
         "service-not-allowed": "This browser doesn't allow voice input here. Try Chrome or Safari, or type instead.",
@@ -115,16 +150,28 @@ export function VoiceAssistant() {
       setListening(false);
       const said = finalText.trim();
       setHeard("");
-      if (said) void sendRef.current(said);
+      if (said.length > 1) { retriesRef.current = 0; void sendRef.current(said); }
+      else if (!failed && handsFreeRef.current && !proposalRef.current) {   // ended without hearing anything: listen again a couple of times
+        if (retriesRef.current < 2) { retriesRef.current += 1; setTimeout(() => { if (handsFreeRef.current && !proposalRef.current) startListening(); }, 300); }
+        else { stopAll(); add("assistant", "I'll stop listening now. Tap the mic whenever you're ready."); }
+      }
     };
     recRef.current = rec;
     try { rec.start(); } catch { setListening(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const keepListening = () => { if (handsFreeRef.current && !proposalRef.current && supported) startListening(); };
+
   const send = async (said: string) => {
     const clean = said.trim().slice(0, 300);
     if (!clean || thinking) return;
+    if (STOP_WORDS.test(clean)) {
+      setMsgs((m) => [...m, { role: "user", text: clean }]);
+      const line = "Okay, I'll stop listening. Tap the mic anytime.";
+      stopAll(); add("assistant", line); speak(line);
+      return;
+    }
     const next: Msg[] = [...msgsRef.current, { role: "user", text: clean }];
     setMsgs(next);
     setText("");
@@ -133,14 +180,13 @@ export function VoiceAssistant() {
     try {
       const r = await api<Reply>("/assistant/chat", { method: "POST", body: { messages: next.slice(-8).map((m) => ({ role: m.role, content: m.text })) } });
       add("assistant", r.reply);
-      if (r.proposals[0]) { keyRef.current = crypto.randomUUID(); setProposal(r.proposals[0]); }
+      if (r.proposals[0]) { keyRef.current = crypto.randomUUID(); proposalRef.current = r.proposals[0]; setProposal(r.proposals[0]); }
       r.actions.forEach(runAction);
-      const asked = /\?\s*$/.test(r.reply) && !r.proposals[0];
-      speak(r.reply, () => { if (asked && supported) startListening(); });
+      speak(r.reply, keepListening);
     } catch (e) {
       const m = errorMessage(e);
       add("assistant", m);
-      speak(m);
+      speak(m, keepListening);
     } finally { setThinking(false); }
   };
 
@@ -157,11 +203,11 @@ export function VoiceAssistant() {
         setProposal(null);
         if (o.payment_url) {
           const line = "Taking you to the payment page now. Come back here when you're done.";
-          add("assistant", line); speak(line, () => { window.location.href = o.payment_url as string; });
+          add("assistant", line); stopAll(); speak(line, () => { window.location.href = o.payment_url as string; });
           setTimeout(() => { window.location.href = o.payment_url as string; }, 2500);
         } else {
           const line = o.status === "paid" ? `Done. ${money(o.amount)} is in your wallet.` : "Your deposit is created. The wallet updates when the payment is confirmed.";
-          add("assistant", line); speak(line); notifyWalletChanged();
+          add("assistant", line); speak(line, keepListening); notifyWalletChanged();
         }
       } else {
         const r = await api<{ status: string; amount: string; bonus?: string; note?: string | null }>(`/games/${proposal.slug}/cash`, {
@@ -172,20 +218,25 @@ export function VoiceAssistant() {
         const line = r.status === "completed" ? `Done. ${money(r.amount)}${extra} is now in ${proposal.game}.`
           : r.status === "failed" ? `${proposal.game} couldn't take the cash, so nothing was charged.`
           : "Your funds are held while we confirm the credit with the game. Nothing is lost.";
-        add("assistant", line); speak(line); notifyWalletChanged();
+        add("assistant", line); speak(line, keepListening); notifyWalletChanged();
       }
     } catch (e) {
       const m = errorMessage(e);
-      setProposal(null); add("assistant", m); speak(m);
+      setProposal(null); proposalRef.current = null; add("assistant", m); speak(m, keepListening);
     } finally { setBusy(false); }
   };
 
-  const cancel = () => { setProposal(null); const line = "Okay, cancelled. Nothing was changed."; add("assistant", line); speak(line); };
+  const cancel = () => { setProposal(null); proposalRef.current = null; const line = "Okay, cancelled. Nothing was changed."; add("assistant", line); speak(line, keepListening); };
   const toggleSpeak = () => { const n = !speakOn; setSpeakOn(n); if (!n) stopSpeaking(); try { localStorage.setItem(STORE_SPEAK, n ? "1" : "0"); } catch { /* ignore */ } };
-  const toggleOpen = () => { if (open) { try { recRef.current?.abort(); } catch { /* ignore */ } stopSpeaking(); } setOpen(!open); };
+  const toggleOpen = () => { if (open) stopAll(); setOpen(!open); };
+  const micTap = () => {
+    if (listening || handsFree) { stopAll(); return; }
+    handsFreeRef.current = true; retriesRef.current = 0; setHandsFree(true); startListening();   // one tap starts a hands-free conversation
+  };
+  const pickLang = (l: string) => { setLang(l); langRef.current = l; try { localStorage.setItem(STORE_LANG, l); } catch { /* ignore */ } };
 
   if (!player || !enabled) return null;
-  const hint = listening ? "Listening…" : thinking ? "Thinking…" : speaking ? "Speaking… tap to stop" : "Tap the mic and ask";
+  const hint = listening ? "Listening… just talk" : thinking ? "Thinking…" : speaking ? "Speaking… tap a message to stop" : handsFree ? "Hands-free: I'll listen again" : "Tap the mic and talk";
 
   return (
     <>
@@ -195,6 +246,10 @@ export function VoiceAssistant() {
           <header className="flex items-center gap-3 border-b border-white/10 bg-gradient-to-r from-[#3b1a5c] to-[#1b2352] px-4 py-3">
             <span className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-[#e879f9] to-[#6366f1]"><Mic className="h-4 w-4" /></span>
             <div className="min-w-0 flex-1"><p className="text-sm font-extrabold leading-tight">Voice assistant</p><p className="text-[11px] text-slate-300">{hint}</p></div>
+            <select value={lang} onChange={(e) => pickLang(e.target.value)} aria-label="Speech language" title="Speech language: pick the accent that matches how you speak"
+              className="h-8 max-w-[5.5rem] rounded-lg border border-white/15 bg-white/10 px-1.5 text-[11px] font-semibold text-slate-100 outline-none">
+              {LANGS.map(([c, n]) => <option key={c} value={c} className="bg-[#0E1424]">{n}</option>)}
+            </select>
             <button onClick={toggleSpeak} aria-label={speakOn ? "Mute voice replies" : "Turn voice replies on"} className="grid h-8 w-8 place-items-center rounded-full text-slate-300 hover:bg-white/10">{speakOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}</button>
             <button onClick={toggleOpen} aria-label="Close assistant" className="grid h-8 w-8 place-items-center rounded-full text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button>
           </header>
@@ -204,9 +259,9 @@ export function VoiceAssistant() {
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-3.5 text-[13px] leading-relaxed text-slate-300">
                 Tap the mic and ask, for example:
                 <ul className="mt-1.5 space-y-1 text-slate-200">
-                  <li>“What&apos;s my balance?”</li><li>“I want to deposit twenty five dollars on card”</li><li>“Load ten dollars in Game Vault”</li><li>“Take me to the bonus zone”</li>
+                  <li>“What&apos;s my balance?”</li><li>“I want to deposit twenty five dollars on card”</li><li>“Load ten dollars in Game Vault”</li><li>“What can I cash out on Game Vault?”</li><li>“Take me to the bonus zone”</li>
                 </ul>
-                <p className="mt-2 text-[11px] text-slate-500">I always ask you to confirm before any money moves.</p>
+                <p className="mt-2 text-[11px] text-slate-500">Tap the mic once and just keep talking; say “stop” when you're done. I always ask you to confirm before any money moves. If I mishear you, pick your accent at the top.</p>
               </div>
             )}
             {msgs.map((m, i) => (
@@ -233,9 +288,9 @@ export function VoiceAssistant() {
           </div>
 
           <form className="flex items-center gap-2 border-t border-white/10 bg-[#0B101D] p-2.5" onSubmit={(e) => { e.preventDefault(); void send(text); }}>
-            <button type="button" onClick={listening ? () => recRef.current?.stop() : startListening} aria-label={listening ? "Stop listening" : "Start listening"} data-testid="voice-mic"
+            <button type="button" onClick={micTap} aria-label={listening || handsFree ? "Stop listening" : "Start listening"} data-testid="voice-mic"
               disabled={!supported || thinking}
-              className={cn("relative grid h-12 w-12 shrink-0 place-items-center rounded-full text-white transition disabled:opacity-40", listening ? "bg-rose-500" : "bg-gradient-to-br from-[#e879f9] to-[#6366f1] hover:brightness-110")}>
+              className={cn("relative grid h-12 w-12 shrink-0 place-items-center rounded-full text-white transition disabled:opacity-40", listening ? "bg-rose-500" : handsFree ? "bg-emerald-500" : "bg-gradient-to-br from-[#e879f9] to-[#6366f1] hover:brightness-110")}>
               {listening && <span className="absolute inset-0 animate-ping rounded-full bg-rose-400/50" aria-hidden />}
               <Mic className="relative h-5 w-5" />
             </button>
