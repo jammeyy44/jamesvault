@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { LiveOperator } from "@/components/live-operator";
 import { DepositSuccessPopup } from "@/components/deposit-success-popup";
+import { VoiceAssistant } from "@/components/voice-assistant";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth";
 import { Header } from "@/components/header";
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Footer />
           <LiveOperator />
           <DepositSuccessPopup />
+          <VoiceAssistant />
         </AuthProvider>
       </body>
     </html>

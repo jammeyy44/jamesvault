@@ -117,10 +117,10 @@ export default function FullscreenGamePage() {
   useEffect(() => { openedCash.current = false; setStep("dashboard"); setAccess(null); }, [slug]); // switching game starts that game fresh
   useEffect(() => {
     if (openedCash.current || !access?.account) return;
-    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("add") === "1") {
-      openedCash.current = true;
-      setStep("cash");
-    }
+    if (typeof window === "undefined") return;
+    const q = new URLSearchParams(window.location.search);
+    if (q.get("add") === "1") { openedCash.current = true; setStep("cash"); }
+    else if (q.get("cashout") === "1") { openedCash.current = true; setStep("redeem"); }
   }, [access]);
 
   const loadAccess = useCallback(async () => {

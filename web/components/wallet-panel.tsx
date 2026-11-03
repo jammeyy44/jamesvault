@@ -26,7 +26,7 @@ export const notifyWalletChanged = () => window.dispatchEvent(new Event(WALLET_E
 
 const money = (v: string | number) => `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-function deviceId() {
+export function deviceId() {
   try {
     let id = localStorage.getItem("jv-device");
     if (!id) { id = crypto.randomUUID().replace(/-/g, ""); localStorage.setItem("jv-device", id); }
