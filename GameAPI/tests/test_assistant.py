@@ -278,3 +278,47 @@ def test_recent_activity_lists_what_happened(api, make_player, game, sandbox_wal
     api.post('/api/v1/games/game-vault/cash', {"amount": "10.00", "source": "wallet", "idempotency_key": "idem-act-0000001"})
     lines = t_get_recent_activity(db.session.get(Player, p["id"]))["latest_first"]
     assert any("added $10.00" in l and "Game Vault" in l for l in lines)
+
+
+# ------------------------------------------------------------------ fixes found in a real conversation
+def test_accent_mishearings_of_game_names_resolve(api, make_player, sandbox_wallet):
+    from app.models_site import CatalogGame
+    from app.services.assistant import _find_game
+    make_player(api)
+    for slug, name in (("juwa", "Juwa"), ("juwa-2", "Juwa 2"), ("game-vault", "Game Vault")):
+        db.session.add(CatalogGame(slug=slug, name=name, category="Slots"))
+    db.session.commit()
+    for said, slug in (("inchua", "juwa"), ("jio", "juwa"), ("juaa", "juwa"), ("jua two", "juwa-2"), ("game fault", "game-vault"),
+                       ("game ball", "game-vault"), ("game bolt", "game-vault"), ("game volt", "game-vault")):
+        g, err = _find_game(said)
+        assert g is not None and g.slug == slug, (said, err)
+
+
+def test_bonus_only_what_if_uses_the_bonus_rule_not_the_cash_table(api, make_player):
+    from app.services.assistant import t_cashout_range_for
+    p = make_player(api)
+    res = t_cashout_range_for(db.session.get(Player, p["id"]), 5, "bonus")
+    assert "$60" in res["explanation"] and "$10" in res["explanation"] and "$20" in res["explanation"] and "cashout_minimum" not in res
+
+
+def test_prompt_states_the_bonus_status_truthfully(api, make_player, game, sandbox_wallet, ai):
+    p = make_player(api)
+    fake = ai(say("ok"), say("ok"), say("ok"))
+    ask(api, "why no bonus")
+    assert "email NOT verified" in fake.seen[0][0]["content"]
+    verified(p["id"])
+    ask(api, "why no bonus")
+    assert "50% signup bonus is AVAILABLE" in fake.seen[1][0]["content"]
+    db.session.get(Player, p["id"]).signup_bonus_claimed_at = db.func.now()
+    db.session.commit()
+    ask(api, "why no bonus")
+    assert "ALREADY USED (it is once per player, not per game)" in fake.seen[2][0]["content"]
+
+
+def test_live_chat_can_be_opened_and_a_message_proposed(api, make_player, ai):
+    make_player(api)
+    ai(call("open_live_chat"), say("Opened the live chat. Anything else?"))
+    assert ask(api, "open live operator").get_json()["actions"] == [{"type": "open_live_chat"}]
+    ai(call("propose_chat_message", text="  hi   there "), say("Please confirm."))
+    prop = ask(api, "send hi there to the operator").get_json()["proposals"][0]
+    assert prop["type"] == "chat_message" and prop["text"] == "hi there"

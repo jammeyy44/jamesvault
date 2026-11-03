@@ -15,15 +15,16 @@ type Proposal =
   | { type: "create_login"; slug: string; game: string; summary: string }
   | { type: "reset_password"; slug: string; game: string; summary: string }
   | { type: "redeem_coupon"; code: string; summary: string }
-  | { type: "verify_email"; summary: string };
-type Action = { type: "navigate"; path: string } | { type: "open_wallet"; tab?: "deposit" | "cashout" };
+  | { type: "verify_email"; summary: string }
+  | { type: "chat_message"; text: string; summary: string };
+type Action = { type: "navigate"; path: string } | { type: "open_wallet"; tab?: "deposit" | "cashout" } | { type: "open_live_chat" };
 type Reply = { reply: string; proposals: Proposal[]; actions: Action[] };
 
 const money = (v: string | number) => `$${Number(v).toFixed(2)}`;
 const STORE_SPEAK = "jv-voice-speak";
 const STORE_LANG = "jv-voice-lang";
 const LANGS: [string, string][] = [["en-US", "English (US)"], ["en-IN", "English (India)"], ["en-GB", "English (UK)"], ["en-AU", "English (AU)"]];
-const STOP_WORDS = /^(stop|stop listening|that'?s all|that is all|goodbye|good bye|bye|bye bye|thanks bye|thank you bye|cancel listening)[.!\s]*$/i;
+const STOP_WORDS = /^(stop|stop listening|stop talking|that'?s all|that is all|that will be all|goodbye|good bye|bye|bye bye|thanks bye|thank you bye|cancel listening|keep silent|be quiet|quiet|silence|shut up|enough)[.!\s]*$/i;
 
 /** Deposits and loading a game move money: those always need a tap. The rest can also be confirmed by saying yes. */
 const isMoney = (p: Proposal) => p.type === "deposit" || p.type === "add_cash";
@@ -110,6 +111,7 @@ export function VoiceAssistant() {
 
   const runAction = useCallback((a: Action) => {
     if (a.type === "open_wallet") { if (a.tab) requestWalletTab(a.tab); window.dispatchEvent(new CustomEvent(OPEN_WALLET_EVENT)); }
+    else if (a.type === "open_live_chat") window.dispatchEvent(new CustomEvent("jv-open-live-chat"));
     else router.push(a.path);
     setMini(true);   // let the player see the page; the microphone stays on
   }, [router]);
@@ -244,6 +246,12 @@ export function VoiceAssistant() {
         setProposal(null); proposalRef.current = null;
         const line = `Done. The coupon ${proposal.code} added ${money(r.amount)} to your bonus balance.`;
         add("assistant", line); speak(line, keepListening); notifyWalletChanged();
+      } else if (proposal.type === "chat_message") {
+        await api("/chat/messages", { method: "POST", body: { text: proposal.text } });
+        setProposal(null); proposalRef.current = null;
+        window.dispatchEvent(new CustomEvent("jv-open-live-chat"));
+        const line = "Sent. I opened the live chat so you can see the operator's reply.";
+        add("assistant", line); setMini(true); speak(line, keepListening);
       } else if (proposal.type === "verify_email") {
         const r = await api<{ message: string }>("/auth/verify-email/request", { method: "POST" });
         setProposal(null); proposalRef.current = null;

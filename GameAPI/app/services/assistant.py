@@ -27,7 +27,8 @@ TOOLS = [
     {"name": "get_cashout_info", "description": "Exact cashout facts for the player's login on a game: the latest cash added to it, the minimum and maximum they can cash out, the current game balance, and whether cashing out is possible now.",
      "parameters": {"type": "object", "properties": {"game": {"type": "string"}}, "required": ["game"]}},
     {"name": "cashout_range_for", "description": "Calculate the cashout range (minimum and maximum) for a hypothetical amount of cash added to a game, from the official table. Use for 'if I deposit 20, what can I cash out?'.",
-     "parameters": {"type": "object", "properties": {"cash_added": {"type": "number", "description": "Dollars of the player's own cash added to the game"}}, "required": ["cash_added"]}},
+     "parameters": {"type": "object", "properties": {"cash_added": {"type": "number", "description": "Dollars added to the game"},
+                                                      "source": {"type": "string", "enum": ["cash", "bonus"], "description": "cash = their own wallet money (default); bonus = bonus balance only"}}, "required": ["cash_added"]}},
     {"name": "list_deposit_methods", "description": "List the payment methods and the amounts each accepts for a deposit.",
      "parameters": {"type": "object", "properties": {}}},
     {"name": "propose_deposit", "description": "Prepare a deposit for the player to confirm. Only call it when you know the amount AND the method.",
@@ -46,6 +47,10 @@ TOOLS = [
      "parameters": {"type": "object", "properties": {"game": {"type": "string"}}, "required": ["game"]}},
     {"name": "propose_redeem_coupon", "description": "Prepare redeeming a coupon code, for the player to confirm. Spell the code back to the player.",
      "parameters": {"type": "object", "properties": {"code": {"type": "string"}}, "required": ["code"]}},
+    {"name": "open_live_chat", "description": "Open the live operator chat window so the player can talk to a human operator.",
+     "parameters": {"type": "object", "properties": {}}},
+    {"name": "propose_chat_message", "description": "Prepare sending a text message to the live operator on the player's behalf, for the player to confirm. Read the message back first.",
+     "parameters": {"type": "object", "properties": {"text": {"type": "string", "description": "The message to send, in the player's own words"}}, "required": ["text"]}},
     {"name": "propose_verify_email", "description": "Prepare sending the player a confirmation email so they can verify their address (needed for the 50% first-add bonus).",
      "parameters": {"type": "object", "properties": {}}},
     {"name": "get_recent_activity", "description": "The player's latest deposits, cash added to games, game cashouts and withdrawals with their status. Use for 'did my deposit arrive', 'what did I do lately'.",
@@ -81,6 +86,18 @@ def _find_game(name):
     games = CatalogGame.query.filter(CatalogGame.status != "hidden").all()
     exact = [g for g in games if g.slug.lower() == name or g.name.lower() == name]
     hits = exact or [g for g in games if name in g.name.lower() or name.replace(" ", "-") in g.slug.lower()]
+    if not hits:  # how speech-to-text tends to write the names (accents differ: "fault", "inchua", "jio")
+        said = "".join(ch for ch in name if ch.isalnum())
+        sounds = {"juwa": ("jua", "jio", "chua", "jwa", "jewa", "dua", "joywa", "juah", "juaa", "juwah", "joa", "huwa"),
+                  "gamevault": ("gamefault", "gameball", "gamebolt", "gamevolt", "gamewall", "gamevote", "gamevalt", "gameworld", "gamevaults", "fault", "vault")}
+        two = any(w in name for w in ("2", "two", "too", "to ")) or said.endswith(("2", "two", "20"))
+        for g in games:
+            key = "".join(ch for ch in g.name.lower() if ch.isalnum())
+            base = key[:-1] if key.endswith("2") else key
+            for canon, alts in sounds.items():
+                if base == canon and any(a in said for a in alts) and (key.endswith("2") == two):
+                    hits.append(g)
+                    break
     if not hits:  # speech-to-text often mishears names ("game volt", "jewa two"): fall back to the closest sounding name
         import difflib
         squash = lambda t: "".join(ch for ch in t.lower() if ch.isalnum())
@@ -140,11 +157,15 @@ def t_get_cashout_info(player, game):
     return out
 
 
-def t_cashout_range_for(player, cash_added):
+def t_cashout_range_for(player, cash_added, source="cash"):
     from app.services import cashout_rules as rules
     a = _amount(cash_added)
     if a is None:
         return {"error": "I need a dollar amount."}
+    if source == "bonus":   # a game funded only by bonus follows the bonus rule, not the cash table
+        return {"rule": "bonus-only game", "explanation": "Bonus can only be loaded into a game, never withdrawn directly. If a game is funded ONLY by bonus, its balance must reach $60 to cash out. "
+                "Then the wallet is credited a fixed amount: $10 when the balance is $60 to $90, $20 when it is $91 or more. The rest of the balance is not carried over. "
+                "If the player adds their own cash to that game too, the normal cash table applies instead."}
     rule = rules.limits(ledger.to_cents(a))
     if rule is None:
         return {"error": "Cash added under $5 does not unlock cashing out."}
@@ -297,6 +318,14 @@ def t_propose_redeem_coupon(player, code):
     return {"proposal": proposal, "tell_the_player": "The confirmation card is on screen. Read the code back and ask them to confirm."}
 
 
+def t_propose_chat_message(player, text):
+    t = " ".join(str(text or "").split())[:500]
+    if len(t) < 2:
+        return {"error": "What should the message say?"}
+    return {"proposal": {"type": "chat_message", "text": t, "summary": f"Send this message to the live operator: \"{t}\""},
+            "tell_the_player": "The confirmation card is on screen. Read the message back and ask them to confirm."}
+
+
 def t_propose_verify_email(player):
     if player.email_verified:
         return {"error": "Their email is already verified."}
@@ -343,7 +372,7 @@ def run_tool(player, name, args):
         if name == "get_cashout_info":
             return t_get_cashout_info(player, args.get("game"))
         if name == "cashout_range_for":
-            return t_cashout_range_for(player, args.get("cash_added"))
+            return t_cashout_range_for(player, args.get("cash_added"), args.get("source") or "cash")
         if name == "list_deposit_methods":
             return t_list_deposit_methods(player)
         if name == "propose_deposit":
@@ -358,6 +387,10 @@ def run_tool(player, name, args):
             return t_get_login_name(player, args.get("game"))
         if name == "propose_redeem_coupon":
             return t_propose_redeem_coupon(player, args.get("code"))
+        if name == "open_live_chat":
+            return {"action": {"type": "open_live_chat"}}
+        if name == "propose_chat_message":
+            return t_propose_chat_message(player, args.get("text"))
         if name == "propose_verify_email":
             return t_propose_verify_email(player)
         if name == "get_recent_activity":
@@ -411,6 +444,16 @@ def _game_facts(player, acct, live):
     return "; ".join(parts)
 
 
+def bonus_status(player):
+    from app.routes.site.accounts import cash_bonus_info
+    info = cash_bonus_info(player)
+    if not info["email_verified"]:
+        return "email NOT verified: every add earns the regular 10%; verifying the email unlocks the one-time 50% signup bonus on their next first add"
+    if info["signup_available"]:
+        return "the one-time 50% signup bonus is AVAILABLE: their very next cash add from the wallet to any game earns 50%"
+    return "the one-time 50% signup bonus is ALREADY USED (it is once per player, not per game); every add now earns 10%. Adds made before the bonus feature existed received no bonus"
+
+
 def facts_block(player, last_text=""):
     accts = GameAccount.query.filter_by(player_id=player.id, status="active").all()
     live = any(w in (last_text or "").lower() for w in LIVE_WORDS)
@@ -437,10 +480,11 @@ reply in one or two short, friendly sentences, plain words, no lists, never use 
 
 Facts about this player (trust these, they come straight from the database): wallet {_money(Decimal(player.wallet_cents) / 100)}, bonus balance {_money(Decimal(player.bonus_cents) / 100)}, \
 email verified: {'yes' if info['email_verified'] else 'no'}, username {player.username}.
+Bonus status: {bonus_status(player)}.
 Their games, with exact cashout facts (read the numbers from here; do not calculate or guess):
 {facts_block(player, last_text)}
 
-The speech-to-text often mishears. Typical mistakes: "guess out", "gash out", "cash app" = cash out; "juaa", "jewa", "dua", "joy wa" = Juwa; "game wall", "game volt" = Game Vault; "ball" = vault or balance; "withdraw" and "withdrawal" mean taking money from the wallet to their payout method.
+The speech-to-text often mishears, especially with accents. Typical mistakes: "eat", "at", "ed", "a" = ADD ("eat 10 box in joy" = "add 10 bucks in Juwa"); "box", "bugs" = bucks (dollars); "tender" = ten; "in chua", "inchua", "jio" = in Juwa / Juwa; "fault", "ball", "bolt" = vault; "gas" = cash. Other mistakes: "guess out", "gash out", "cash app" = cash out; "juaa", "jewa", "dua", "joy wa" = Juwa; "game wall", "game volt" = Game Vault; "ball" = vault or balance; "withdraw" and "withdrawal" mean taking money from the wallet to their payout method.
 
 Rules of the site:
 - Deposits: the player pays the provider's amount (like $24.99) and the wallet receives whole dollars ($25). The player completes payment on the payment provider's page themselves.
@@ -454,12 +498,13 @@ Rules of the site:
   For a specific game or a what-if question ALWAYS call get_cashout_info or cashout_range_for and read the numbers from it; do not do the arithmetic yourself.
 - Other features you can explain briefly: referral bonus (a friend's first deposit earns the referrer $10 bonus balance), the Bonus Zone (tasks that earn diamonds, boxes), Test Your Luck (3, 4 or 5 deposits without a cashout earn 5, 8 or 15 diamonds), free spin, coupons. If unsure of any detail say you are not sure and offer to open the page.
 
-Speech recognition is imperfect and may mishear words (for example "game vault" as "game wall", "cash out" as "cash app", numbers like fifteen and fifty). Interpret generously using context. If an amount, a game or a payment method is unclear, ask a short question instead of guessing, and always say the amount back before proposing.
+Speech recognition is imperfect and may mishear words (for example "game vault" as "game wall", "cash out" as "cash app", numbers like fifteen and fifty). Interpret generously using context. NEVER answer "I'm not sure what you mean": make your best guess of the intent and check it in one short sentence ("Did you mean add ten dollars to Juwa?"). If an amount, a game or a payment method is truly unclear, ask one short question, and always say the amount back before proposing.
 
 Everything you can do for the player (use these, do not say you can't if a tool fits):
 - answer questions about balances, bonuses, rules, cashout ranges, recent activity;
 - open any page or a game's play / add-cash / cash-out screen (navigate);
 - deposit (propose_deposit), load a game (propose_add_cash), create a game login (propose_create_login), reset a game password (propose_reset_password), redeem a coupon (propose_redeem_coupon), send the verification email (propose_verify_email); each only shows a confirm card;
+- open the live operator chat and send a message to the operator for them (open_live_chat, propose_chat_message);
 - tell their game username (get_login_name). You can NEVER read a password out loud or see one: after creating or resetting, the password appears on the game page, so say "it's on the screen".
 Games on the site: {', '.join(g.name for g in CatalogGame.query.filter(CatalogGame.status != 'hidden').order_by(CatalogGame.sort_order).limit(12))}.
 When you open a page or screen for the player, say what you opened in a few words and then ask "anything else?", because the microphone stays on.
@@ -469,6 +514,10 @@ How to act:
 - Use tools for anything you are not sure of. Never invent balances or rules.
 - To deposit or load a game: collect any missing detail (amount, method, game) by asking ONE short question, then call propose_deposit or propose_add_cash. They only show a confirmation card; nothing happens until the player taps Confirm. After proposing, tell them to confirm on screen.
 - If a tool returns an error, explain it in plain words and offer the next step (for example a deposit if the wallet is too low).
+- For "my login details": call get_login_name and say the username; the password is on the game page, and offer to open it (navigate target game).
+- Questions about which games they play or have: answer from the facts list above. Questions about the bonus ("why didn't I get a bonus"): answer from the bonus status and the game facts, never invent a reason.
+- Only say you opened something or did something if you actually called the tool that does it. Never promise a page that does not exist (there is no coupon page: a coupon is redeemed with propose_redeem_coupon once they say the code).
+- Live operator: "talk to a person / live chat / operator" -> open_live_chat. If they also dictate a message, read it back and call propose_chat_message.
 - You cannot see or change passwords, payout details or anyone else's account. If asked, say you can't do that by voice.
 - Stay on topic: this site, the wallet, bonuses and games. Politely decline anything else."""
 

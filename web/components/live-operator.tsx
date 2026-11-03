@@ -97,6 +97,11 @@ export function LiveOperator() {
 
   useEffect(() => { if (open && player) { markRead(); poll(); } }, [open, player, markRead, poll]);
   useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: reduce ? "auto" : "smooth" }); }, [messages, open, typing, reduce]);
+  useEffect(() => {   // the voice assistant can open the operator chat
+    const openIt = () => setOpen(true);
+    window.addEventListener("jv-open-live-chat", openIt);
+    return () => window.removeEventListener("jv-open-live-chat", openIt);
+  }, []);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
