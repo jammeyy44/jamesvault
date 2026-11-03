@@ -26,9 +26,9 @@ const STORE_LANG = "jv-voice-lang";
 const LANGS: [string, string][] = [["en-US", "English (US)"], ["en-IN", "English (India)"], ["en-GB", "English (UK)"], ["en-AU", "English (AU)"]];
 const STOP_WORDS = /^(stop|stop listening|stop talking|that'?s all|that is all|that will be all|goodbye|good bye|bye|bye bye|thanks bye|thank you bye|cancel listening|keep silent|be quiet|quiet|silence|shut up|enough)[.!\s]*$/i;
 
-/** Deposits and loading a game move money: those always need a tap. The rest can also be confirmed by saying yes. */
-const isMoney = (p: Proposal) => p.type === "deposit" || p.type === "add_cash";
-const YES = /^(yes|yeah|yep|yup|sure|ok|okay|confirm|confirmed|do it|go ahead|please do|correct|that'?s right|right)\b/i;
+/** Deposits, loading a game and password resets always need a TAP (a misheard or echoed word must never trigger them). The rest can also be confirmed by saying yes. */
+const isMoney = (p: Proposal) => p.type === "deposit" || p.type === "add_cash" || p.type === "reset_password";
+const YES = /^(yes|yeah|yep|yup|sure|ok|okay|confirm|confirmed|do it|go ahead|please do|correct|that'?s right)\b/i;
 const NO = /^(no|nope|nah|cancel|don'?t|do not|never mind|nevermind)\b/i;
 
 function speechRecognition(): any | null {
@@ -58,6 +58,8 @@ export function VoiceAssistant() {
   const handsFreeRef = useRef(false);
   const langRef = useRef("en-US");
   const retriesRef = useRef(0);
+  const netRef = useRef(0);
+  const lastReplyRef = useRef("");
   const proposalRef = useRef<Proposal | null>(null);
   const recRef = useRef<any>(null);
   const keyRef = useRef<string>("");
@@ -107,7 +109,14 @@ export function VoiceAssistant() {
     } catch { then?.(); }
   }, [speakOn]);
 
-  const add = (role: Msg["role"], t: string) => setMsgs((m) => [...m, { role, text: t }]);
+  const add = (role: Msg["role"], t: string) => { if (role === "assistant") lastReplyRef.current = t; setMsgs((m) => [...m, { role, text: t }]); };
+  /** The microphone sometimes picks up the assistant's own voice: a transcript that mostly repeats its last reply is ignored. */
+  const looksLikeEcho = (said: string) => {
+    const words = said.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+    if (words.length < 2) return false;
+    const reply = new Set(lastReplyRef.current.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean));
+    return words.filter((w) => reply.has(w)).length / words.length >= 0.75;
+  };
 
   const runAction = useCallback((a: Action) => {
     if (a.type === "open_wallet") { if (a.tab) requestWalletTab(a.tab); window.dispatchEvent(new CustomEvent(OPEN_WALLET_EVENT)); }
@@ -147,6 +156,11 @@ export function VoiceAssistant() {
     rec.onerror = (e: any) => {
       setListening(false);
       failed = true;
+      if (e.error === "network" && handsFreeRef.current && netRef.current < 2) {
+        netRef.current += 1;
+        setTimeout(() => { if (handsFreeRef.current && !pendingMoney()) startListening(); }, 1000);
+        return;
+      }
       if (e.error === "no-speech" && handsFreeRef.current) {   // silence while hands-free: wait a little, then give up politely
         if (retriesRef.current < 2) { retriesRef.current += 1; setTimeout(() => { if (handsFreeRef.current && !pendingMoney()) startListening(); }, 300); }
         else { stopAll(); add("assistant", "I'll stop listening now. Tap the mic whenever you're ready."); }
@@ -167,8 +181,8 @@ export function VoiceAssistant() {
       setListening(false);
       const said = finalText.trim();
       setHeard("");
-      if (said.length > 1) { retriesRef.current = 0; void sendRef.current(said); }
-      else if (!failed && handsFreeRef.current && !pendingMoney()) {   // ended without hearing anything: listen again a couple of times
+      if (said.length > 1 && !looksLikeEcho(said)) { retriesRef.current = 0; netRef.current = 0; void sendRef.current(said); }
+      else if (!failed && handsFreeRef.current && !pendingMoney()) {   // heard nothing, or only its own voice   // ended without hearing anything: listen again a couple of times
         if (retriesRef.current < 2) { retriesRef.current += 1; setTimeout(() => { if (handsFreeRef.current && !pendingMoney()) startListening(); }, 300); }
         else { stopAll(); add("assistant", "I'll stop listening now. Tap the mic whenever you're ready."); }
       }
@@ -178,7 +192,10 @@ export function VoiceAssistant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const keepListening = () => { if (handsFreeRef.current && !pendingMoney() && supported) startListening(); };
+  const keepListening = () => {
+    if (!handsFreeRef.current || !supported) return;
+    setTimeout(() => { if (handsFreeRef.current && !pendingMoney()) startListening(); }, 700);
+  };
 
   const send = async (said: string) => {
     const clean = said.trim().slice(0, 300);
@@ -191,8 +208,9 @@ export function VoiceAssistant() {
     }
     const pend = proposalRef.current;
     if (pend && !isMoney(pend)) {   // "yes" / "no" answers a pending login, password, coupon or email card
-      if (YES.test(clean)) { setMsgs((m) => [...m, { role: "user", text: clean }]); void confirmRef.current(); return; }
-      if (NO.test(clean)) { setMsgs((m) => [...m, { role: "user", text: clean }]); cancelRef.current(); return; }
+      const short = clean.split(/\s+/).length <= 4;
+      if (short && YES.test(clean)) { setMsgs((m) => [...m, { role: "user", text: clean }]); void confirmRef.current(); return; }
+      if (short && NO.test(clean)) { setMsgs((m) => [...m, { role: "user", text: clean }]); cancelRef.current(); return; }
     }
     const next: Msg[] = [...msgsRef.current, { role: "user", text: clean }];
     setMsgs(next);
@@ -338,7 +356,7 @@ export function VoiceAssistant() {
                 <ul className="mt-1.5 space-y-1 text-slate-200">
                   <li>“What&apos;s my balance?”</li><li>“I want to deposit twenty five dollars on card”</li><li>“Load ten dollars in Game Vault”</li><li>“Create my Juwa login” or “reset my Game Vault password”</li><li>“What can I cash out on Game Vault?”</li><li>“Take me to the bonus zone”</li>
                 </ul>
-                <p className="mt-2 text-[11px] text-slate-500">Tap the mic once and just keep talking; say “stop” when you're done. I always ask you to confirm first: say “yes” for logins and passwords, tap Confirm for money. If I mishear you, pick your accent at the top.</p>
+                <p className="mt-2 text-[11px] text-slate-500">Tap the mic once and just keep talking; say “stop” when you're done. I always ask you to confirm first: say “yes” for a new login, a coupon or a message; tap Confirm for money and password resets. If I mishear you, pick your accent at the top.</p>
               </div>
             )}
             {msgs.map((m, i) => (

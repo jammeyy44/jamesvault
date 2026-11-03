@@ -88,14 +88,16 @@ def _find_game(name):
     hits = exact or [g for g in games if name in g.name.lower() or name.replace(" ", "-") in g.slug.lower()]
     if not hits:  # how speech-to-text tends to write the names (accents differ: "fault", "inchua", "jio")
         said = "".join(ch for ch in name if ch.isalnum())
-        sounds = {"juwa": ("jua", "jio", "chua", "jwa", "jewa", "dua", "joywa", "juah", "juaa", "juwah", "joa", "huwa"),
-                  "gamevault": ("gamefault", "gameball", "gamebolt", "gamevolt", "gamewall", "gamevote", "gamevalt", "gameworld", "gamevaults", "fault", "vault")}
+        # (names that may appear inside what was heard, names that only count when they are the whole phrase: "wall" must not match "wallet")
+        sounds = {"juwa": (("jua", "jio", "chua", "jwa", "jewa", "dua", "zua", "joywa", "juah", "juaa", "juwah", "joa", "huwa"), ()),
+                  "gamevault": (("gamefault", "gameball", "gamebolt", "gamevolt", "gamewall", "gamevote", "gamevalt", "gameworld", "gamevaults", "gamehault", "gamehalt", "gamebalt"),
+                                ("fault", "vault", "hault", "halt", "balt", "bolt", "ball", "volt", "wall", "vote"))}
         two = any(w in name for w in ("2", "two", "too", "to ")) or said.endswith(("2", "two", "20"))
         for g in games:
             key = "".join(ch for ch in g.name.lower() if ch.isalnum())
             base = key[:-1] if key.endswith("2") else key
-            for canon, alts in sounds.items():
-                if base == canon and any(a in said for a in alts) and (key.endswith("2") == two):
+            for canon, (inside, whole) in sounds.items():
+                if base == canon and (any(a in said for a in inside) or said in whole) and (key.endswith("2") == two):
                     hits.append(g)
                     break
     if not hits:  # speech-to-text often mishears names ("game volt", "jewa two"): fall back to the closest sounding name
@@ -468,6 +470,43 @@ def plain(text):
     return re.sub(r"\s+", " ", t).strip()
 
 
+OPEN_INTENT = None  # compiled lazily below
+
+
+def infer_navigation(player, text):
+    """When the model says it opened something (or the player clearly asked to open something) but called no tool, work out the
+    destination from the player's own words. Returns (action, spoken) or None."""
+    import re
+    t = " ".join(re.sub(r"[^a-z0-9 ]", " ", str(text or "").lower()).split())
+    rules = [
+        (r"\b(withdraw|withdrawal|withdrawals|payout)\b", {"type": "open_wallet", "tab": "cashout"}, "your wallet's Withdrawal tab"),
+        (r"\b(live (operator|chat|support)|operator|human|real person|talk to (a )?(person|someone))\b", {"type": "open_live_chat"}, "the live chat"),
+        (r"\b(wallet|deposit|top up)\b", {"type": "open_wallet"}, "your wallet"),
+        (r"\b(bonus zone|bonus page|rewards|missions)\b", {"type": "navigate", "path": "/bonus-zone"}, "the Bonus Zone"),
+        (r"\b(refer|referral|invite)\b", {"type": "navigate", "path": "/refer"}, "the referral page"),
+        (r"\b(support|help page|contact)\b", {"type": "navigate", "path": "/support"}, "the support page"),
+        (r"\bcash ?out rules?\b", {"type": "navigate", "path": "/cashout-rules"}, "the cashout rules"),
+    ]
+    # a game name first: "open jio account", "go to my game fault page"
+    filler = {"open", "go", "to", "my", "the", "me", "take", "show", "page", "login", "logins", "account", "screen", "game", "please", "a", "i", "want", "you", "can", "up", "add", "cash", "out", "of", "on", "in", "for", "now", "and"}
+    left = " ".join(w for w in t.split() if w not in filler)
+    if left and not any(re.search(rx, t) for rx, _, _ in rules[:2]):
+        g, err = _find_game(left)
+        if g is not None:
+            screen = "?add=1" if re.search(r"\b(add|load)\b.*\b(cash|money|bucks|dollars)\b|\badd cash\b", t) else "?cashout=1" if re.search(r"cash ?out|redeem", t) else ""
+            return {"type": "navigate", "path": f"/game/{g.slug}{screen}"}, f"the {g.name} page"
+    for rx, action, label in rules:
+        if re.search(rx, t):
+            return action, label
+    for rx, path, label in ((r"\b(dashboard|my account|account page|profile|notifications?|settings)\b", "/dashboard", "your account"),
+                            (r"\b(games|lobby|all games)\b", "/games", "the games"), (r"\b(home|main page)\b", "/", "the home page")):
+        if re.search(rx, t):
+            return {"type": "navigate", "path": path}, label
+    if re.search(r"\baccount\b", t):
+        return {"type": "navigate", "path": "/dashboard"}, "your account"
+    return None
+
+
 def system_prompt(player, last_text=""):
     from app.routes.site.accounts import cash_bonus_info
     info = cash_bonus_info(player)
@@ -484,7 +523,7 @@ Bonus status: {bonus_status(player)}.
 Their games, with exact cashout facts (read the numbers from here; do not calculate or guess):
 {facts_block(player, last_text)}
 
-The speech-to-text often mishears, especially with accents. Typical mistakes: "eat", "at", "ed", "a" = ADD ("eat 10 box in joy" = "add 10 bucks in Juwa"); "box", "bugs" = bucks (dollars); "tender" = ten; "in chua", "inchua", "jio" = in Juwa / Juwa; "fault", "ball", "bolt" = vault; "gas" = cash. Other mistakes: "guess out", "gash out", "cash app" = cash out; "juaa", "jewa", "dua", "joy wa" = Juwa; "game wall", "game volt" = Game Vault; "ball" = vault or balance; "withdraw" and "withdrawal" mean taking money from the wallet to their payout method.
+The speech-to-text often mishears, especially with accents. Typical mistakes: "eat", "at", "ed", "a" = ADD ("eat 10 box in joy" = "add 10 bucks in Juwa"); "box", "bugs" = bucks (dollars); "tender" = ten; "in chua", "inchua", "jio" = in Juwa / Juwa; "fault", "hault", "halt", "ball", "bolt", "balt" = vault; "gas", "class", "cast", "cats" = cash; "kiss out", "kids out", "cancel out", "catch out", "gash out" = cash out; "speed", "spend" can mean add; "zua", "jua", "dua" = Juwa. Other mistakes: "guess out", "gash out", "cash app" = cash out; "juaa", "jewa", "dua", "joy wa" = Juwa; "game wall", "game volt" = Game Vault; "ball" = vault or balance; "withdraw" and "withdrawal" mean taking money from the wallet to their payout method.
 
 Rules of the site:
 - Deposits: the player pays the provider's amount (like $24.99) and the wallet receives whole dollars ($25). The player completes payment on the payment provider's page themselves.
@@ -553,6 +592,18 @@ def converse(player, history):
                 if result.get("action"):
                     actions.append(result["action"])
             messages.append({"role": "tool", "tool_call_id": c["id"], "content": json.dumps(result)[:1500]})
+    if not proposals and not actions:   # safety net: it said it opened something without calling the tool, or an "open ..." request was ignored
+        import re
+        said = history[-1]["content"] if history else ""
+        claims = re.search(r"\b(i'?ve opened|i have opened|i opened|opening|i'?ll open|let me open)\b", reply, re.I)
+        wants = re.match(r"\s*(please\s+)?(open|go to|take me|show( me)?|navigate)\b", said, re.I)
+        if claims or wants:
+            found = infer_navigation(player, said)
+            if found:
+                actions = [found[0]]
+                reply = f"I've opened {found[1]}. Anything else?"
+            elif claims:
+                reply = "Sorry, I couldn't open that. Which page would you like?"
     if not reply:
         reply = "Done." if (proposals or actions) else "Sorry, I didn't catch that. Could you say it again?"
     if proposals:

@@ -322,3 +322,42 @@ def test_live_chat_can_be_opened_and_a_message_proposed(api, make_player, ai):
     ai(call("propose_chat_message", text="  hi   there "), say("Please confirm."))
     prop = ask(api, "send hi there to the operator").get_json()["proposals"][0]
     assert prop["type"] == "chat_message" and prop["text"] == "hi there"
+
+
+# ------------------------------------------------------------------ "I opened it" must be true
+def _games(*names):
+    from app.models_site import CatalogGame
+    for n in names:
+        db.session.add(CatalogGame(slug=n.lower().replace(" ", "-"), name=n, category="Slots"))
+    db.session.commit()
+
+
+def test_a_claimed_but_missing_open_is_done_from_the_players_words(api, make_player, ai):
+    make_player(api)
+    _games("Juwa", "Game Vault")
+    ai(say("I've opened your Juwa game page. Anything else?"))        # the model said it, but called no tool
+    r = ask(api, "open jio account").get_json()
+    assert r["actions"] == [{"type": "navigate", "path": "/game/juwa"}] and "Juwa" in r["reply"]
+    ai(say("The withdrawal screen should be open now."))
+    assert ask(api, "open withdrawal and select method").get_json()["actions"] == [{"type": "open_wallet", "tab": "cashout"}]
+    ai(say("I'm not sure which account you mean."))                    # an "open ..." request that was ignored
+    assert ask(api, "open to account").get_json()["actions"] == [{"type": "navigate", "path": "/dashboard"}]
+    ai(say("I've opened the moon page."))                              # nothing real matches: say so, do not pretend
+    r = ask(api, "ok then").get_json()
+    assert r["actions"] == [] and "couldn't open" in r["reply"]
+
+
+def test_infer_navigation_maps_words_to_places(api, make_player):
+    from app.services.assistant import infer_navigation
+    p = make_player(api)
+    _games("Juwa", "Game Vault")
+    player = db.session.get(Player, p["id"])
+    cases = {"go to my game hault page": "/game/game-vault", "open zua account": "/game/juwa", "take me to the bonus zone": "/bonus-zone",
+             "open referral": "/refer", "show me support": "/support", "open juwa and add cash": "/game/juwa?add=1",
+             "open game vault cash out": "/game/game-vault?cashout=1"}
+    for said, path in cases.items():
+        found = infer_navigation(player, said)
+        assert found and found[0].get("path") == path, (said, found)
+    assert infer_navigation(player, "open my wallet")[0] == {"type": "open_wallet"}
+    assert infer_navigation(player, "talk to a live operator")[0] == {"type": "open_live_chat"}
+    assert infer_navigation(player, "what is the weather") is None
