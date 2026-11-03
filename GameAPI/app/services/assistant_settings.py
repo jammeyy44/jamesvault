@@ -4,6 +4,7 @@ The key is stored encrypted (AES-GCM, same as game passwords) in app_settings, i
 only "set" and the last 4 characters), and falls back to the NVIDIA_API_KEY / ANTHROPIC_API_KEY environment variables.
 """
 import os
+import time
 
 import requests
 
@@ -84,6 +85,7 @@ def test_connection(p=None):
     if not key:
         return False, "No API key saved yet."
     meta = PROVIDERS[p]
+    started = time.monotonic()
     try:
         if p == "anthropic":
             r = requests.post(f"{meta['base_url']}/messages", timeout=25,
@@ -98,7 +100,9 @@ def test_connection(p=None):
     except requests.RequestException as e:
         return False, f"Could not reach the provider ({type(e).__name__})."
     if r.status_code == 200:
-        return True, "Connected. The key and model work."
+        secs = time.monotonic() - started
+        verdict = "fast enough for voice" if secs < 3 else "a bit slow for voice" if secs < 6 else "slow for voice: expect long pauses"
+        return True, f"Connected. The key and model work. A tiny reply took {secs:.1f} seconds ({verdict})."
     if r.status_code in (401, 403):
         return False, "The provider rejected this key (invalid, expired or not allowed for this model)."
     if r.status_code == 404:
