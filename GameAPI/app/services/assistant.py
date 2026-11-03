@@ -40,7 +40,7 @@ TOOLS = [
                     "required": ["game", "amount"]}},
     {"name": "navigate", "description": "Open a part of the website for the player.",
      "parameters": {"type": "object", "properties": {
-         "target": {"type": "string", "enum": ["home", "games", "wallet", "bonus_zone", "refer", "support", "dashboard", "cashout_rules", "game"]},
+         "target": {"type": "string", "enum": ["home", "games", "wallet", "wallet_withdraw", "bonus_zone", "refer", "support", "dashboard", "cashout_rules", "game"]},
          "game": {"type": "string", "description": "Game name, when target is game"},
          "screen": {"type": "string", "enum": ["play", "add_cash", "cash_out"], "description": "Which screen of the game; default play"}},
                     "required": ["target"]}},
@@ -233,6 +233,8 @@ def t_propose_add_cash(player, game, amount, source="wallet"):
 def t_navigate(player, target, game=None, screen="play"):
     if target == "wallet":
         return {"action": {"type": "open_wallet"}}
+    if target == "wallet_withdraw":
+        return {"action": {"type": "open_wallet", "tab": "cashout"}}
     if target in PAGES:
         return {"action": {"type": "navigate", "path": PAGES[target]}}
     if target == "game":
@@ -267,7 +269,61 @@ def run_tool(player, name, args):
 
 
 # ------------------------------------------------------------------ prompt + loop
-def system_prompt(player):
+LIVE_WORDS = ("balance", "cash out", "cashout", "cash-out", "withdraw", "how much", "range", "limit", "redeem", "worth", "have in", "guess out", "gash out",
+              "minimum", "maximum", "can i get", "can i take")
+
+
+def _game_facts(player, acct, live):
+    """One line of exact facts about a login. Database numbers always; the live game balance only when live=True (it is a provider call)."""
+    from app.routes.site.redeem import _added_to_game
+    from app.models_site import RedeemRequest
+    from app.services import cashout_rules as rules
+    name = acct.game.name
+    added = _added_to_game(acct)
+    cash, bonus = Decimal(added["cash"]), Decimal(added["bonus"])
+    parts = [f"{name}: cash added since the last cashout {_money(cash)}, bonus added {_money(bonus)}"]
+    bal_cents = None
+    if live:
+        gw = get_gateway()
+        try:
+            bal_cents = ledger.to_cents(gw.get_balance(acct)) if gw is not None else None
+        except Exception:
+            bal_cents = None
+        parts.append(f"live game balance {_money(Decimal(bal_cents) / 100)}" if bal_cents is not None else "live game balance could not be read right now")
+    if cash == 0 and bonus > 0:
+        parts.append("funded only by bonus: cashing out needs a balance of $60; then the wallet gets $10 (balance $60 to $90) or $20 ($91 and above)")
+    else:
+        dep = rules.latest_game_deposit(player.id, acct.id)
+        rule = rules.limits(dep.amount_cents) if dep else None
+        if rule is None:
+            parts.append("no cash of their own added yet, so cashing out is not unlocked (add $5 or more of their own cash)")
+        else:
+            lo, hi = rule["min_cents"], rule["max_cents"]
+            parts.append(f"latest cash added that sets the range {_money(Decimal(dep.amount_cents) / 100)}; CASHOUT RANGE minimum {_money(Decimal(lo) / 100)}, maximum {_money(Decimal(hi) / 100)}")
+            done = RedeemRequest.query.filter_by(deposit_lock_id=dep.id).first() is not None
+            if done:
+                parts.append("already cashed out for that add (add cash again to cash out again)")
+            elif bal_cents is not None:
+                parts.append("CAN cash out now" + (f", winnings above the maximum ({_money(Decimal(bal_cents - hi) / 100)}) would be voided" if bal_cents > hi else "")
+                             if bal_cents >= lo else f"cannot cash out yet: balance is below the minimum {_money(Decimal(lo) / 100)}")
+    return "; ".join(parts)
+
+
+def facts_block(player, last_text=""):
+    accts = GameAccount.query.filter_by(player_id=player.id, status="active").all()
+    live = any(w in (last_text or "").lower() for w in LIVE_WORDS)
+    return "\n".join(f"- {_game_facts(player, a, live)}" for a in accts) or "- no game logins yet"
+
+
+def plain(text):
+    """The reply is read aloud: no markdown symbols."""
+    import re
+    t = re.sub(r"[*_`#>]+", "", text or "")
+    t = re.sub(r"^\s*[-•]\s+", "", t, flags=re.M)
+    return re.sub(r"\s+", " ", t).strip()
+
+
+def system_prompt(player, last_text=""):
     from app.routes.site.accounts import cash_bonus_info
     info = cash_bonus_info(player)
     games = []
@@ -275,16 +331,20 @@ def system_prompt(player):
         games.append(a.game.name)
     cfg = current_app.config
     return f"""You are the voice assistant of stakesweep.net, speaking with the player "{player.username}". Your replies are READ ALOUD, so:
-reply in one or two short, friendly sentences, plain words, no lists, no markdown, no emoji. Say amounts like "ten dollars".
+reply in one or two short, friendly sentences, plain words, no lists, never use asterisks or any markdown, no emoji. Say amounts like "ten dollars".
 
-Facts about this player (trust these): wallet {_money(Decimal(player.wallet_cents) / 100)}, bonus balance {_money(Decimal(player.bonus_cents) / 100)}, \
-email verified: {'yes' if info['email_verified'] else 'no'}, games with a login: {', '.join(games) or 'none yet'}.
+Facts about this player (trust these, they come straight from the database): wallet {_money(Decimal(player.wallet_cents) / 100)}, bonus balance {_money(Decimal(player.bonus_cents) / 100)}, \
+email verified: {'yes' if info['email_verified'] else 'no'}, username {player.username}.
+Their games, with exact cashout facts (read the numbers from here; do not calculate or guess):
+{facts_block(player, last_text)}
+
+The speech-to-text often mishears. Typical mistakes: "guess out", "gash out", "cash app" = cash out; "juaa", "jewa", "dua", "joy wa" = Juwa; "game wall", "game volt" = Game Vault; "ball" = vault or balance; "withdraw" and "withdrawal" mean taking money from the wallet to their payout method.
 
 Rules of the site:
 - Deposits: the player pays the provider's amount (like $24.99) and the wallet receives whole dollars ($25). The player completes payment on the payment provider's page themselves.
 - Adding cash to a game: from the wallet, only when the game's balance is under $1. Bonus on the cash added: {info['signup_percent']}% on the first add to any one game (needs a verified email), then {info['regular_percent']}% on every add. The bonus goes into the game, not the wallet. This player's next add earns {info['percent']}%.
 - Bonus balance can be loaded into a game only when the wallet is under $1.
-- Cashing out needs the game's cashout screen; you can open it but you cannot cash out yourself. Withdrawals to a payout method are done in the wallet.
+- Two different things: (1) CASHING OUT A GAME moves the game's balance into the WALLET, on the game's cashout screen (you can open it with navigate target game, screen cash_out; you cannot press the button). (2) WITHDRAWING means sending WALLET money to their payout method (CashApp, Chime, etc.): call navigate with target wallet_withdraw and say "I opened your wallet's Withdrawal tab, enter your payout details there". You cannot withdraw for them.
 - Minimum add cash {_money(cfg['CASH_MIN'])}, maximum {_money(cfg['CASH_MAX'])}.
 - CASHOUT RANGE (cashing out a game's balance into the wallet): it is decided by the LATEST CASH THE PLAYER ADDED TO THAT GAME (their own cash; bonus does not count; under $5 unlocks nothing). The table is:
   cash added $5 -> minimum $50, maximum $50; $5 to $9 -> minimum $50, maximum $100; $10 to $16 -> minimum $50, maximum 12 times the cash added; $17 to $25 -> minimum 3 times, maximum 12 times; $26 to $30 -> minimum 3 times, maximum 12 times; above $30 -> minimum 3 times, maximum 12 times with a hard cap of $500.
@@ -316,7 +376,7 @@ def clean_history(raw):
 
 def converse(player, history):
     """Returns {"reply": str, "proposals": [...], "actions": [...]}. Raises assistant_llm.AssistantUnavailable."""
-    messages = [{"role": "system", "content": system_prompt(player)}] + history
+    messages = [{"role": "system", "content": system_prompt(player, history[-1]["content"] if history else "")}] + history
     proposals, actions, reply = [], [], ""
     for _ in range(MAX_ROUNDS):
         text, calls = assistant_llm.chat(messages, TOOLS)
@@ -337,4 +397,4 @@ def converse(player, history):
         reply = "Done." if (proposals or actions) else "Sorry, I didn't catch that. Could you say it again?"
     if proposals:
         reply = reply or proposals[0]["summary"]
-    return {"reply": reply[:600], "proposals": proposals, "actions": actions[:1]}
+    return {"reply": plain(reply)[:600], "proposals": proposals, "actions": actions[:1]}

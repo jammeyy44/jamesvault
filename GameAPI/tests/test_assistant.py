@@ -195,3 +195,35 @@ def test_misheard_game_names_still_find_the_game(api, make_player, game, sandbox
         g, err = _find_game(said)
         assert g is not None and g.slug == "game-vault", said
     assert _find_game("zzzzzz")[0] is None
+
+
+# ------------------------------------------------------------------ grounding: the answers come from facts, not from the model's memory
+def test_the_prompt_carries_each_games_exact_cashout_range(api, make_player, game, sandbox_wallet, ai):
+    p = make_player(api)
+    _access(api)
+    fund(p["id"], 5000)
+    api.post('/api/v1/games/game-vault/cash', {"amount": "20.00", "source": "wallet", "idempotency_key": "idem-ground-0001"})
+    fake = ai(say("Your range is sixty to two hundred forty."))
+    ask(api, "how much can I cash out on game vault")
+    prompt = fake.seen[0][0]["content"]
+    assert "Game Vault: cash added since the last cashout $20.00" in prompt
+    assert "CASHOUT RANGE minimum $60.00, maximum $240.00" in prompt
+    assert "live game balance" in prompt and "CAN cash out now" in prompt or "cannot cash out yet" in prompt      # a cashout question reads the live balance
+
+
+def test_live_balance_is_only_read_when_the_question_needs_it(api, make_player, game, sandbox_wallet, ai):
+    make_player(api)
+    _access(api)
+    fake = ai(say("Sure."))
+    ask(api, "tell me a joke about slots")
+    assert "live game balance" not in fake.seen[0][0]["content"]
+
+
+def test_withdraw_opens_the_wallet_withdrawal_tab_and_markdown_is_stripped(api, make_player, ai):
+    from app.services.assistant import plain
+    make_player(api)
+    ai(call("navigate", target="wallet_withdraw"), say("**Opened** your wallet. Enter your payout details."))
+    r = ask(api, "I want to withdraw from my wallet").get_json()
+    assert r["actions"] == [{"type": "open_wallet", "tab": "cashout"}]
+    assert r["reply"] == "Opened your wallet. Enter your payout details." and "*" not in r["reply"]
+    assert plain("- **Game Vault**: _$5_\n- `Juwa`") == "Game Vault: $5 Juwa"

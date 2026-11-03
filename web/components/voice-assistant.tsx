@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Gift, Mic, Send, Volume2, VolumeX, X } from "lucide-react";
-import { OPEN_WALLET_EVENT, deviceId, notifyWalletChanged } from "./wallet-panel";
+import { Check, ClipboardCopy, Gift, Mic, Send, Volume2, VolumeX, X } from "lucide-react";
+import { OPEN_WALLET_EVENT, deviceId, notifyWalletChanged, requestWalletTab } from "./wallet-panel";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -12,7 +12,7 @@ type Msg = { role: "user" | "assistant"; text: string };
 type Proposal =
   | { type: "deposit"; method_id: string; method_name: string; pay: string; credit: string; summary: string }
   | { type: "add_cash"; slug: string; game: string; amount: string; source: "wallet" | "bonus"; bonus: string; bonus_percent: number; total: string; summary: string };
-type Action = { type: "navigate"; path: string } | { type: "open_wallet" };
+type Action = { type: "navigate"; path: string } | { type: "open_wallet"; tab?: "deposit" | "cashout" };
 type Reply = { reply: string; proposals: Proposal[]; actions: Action[] };
 
 const money = (v: string | number) => `$${Number(v).toFixed(2)}`;
@@ -79,7 +79,7 @@ export function VoiceAssistant() {
     if (!speakOn || typeof window === "undefined" || !window.speechSynthesis) { then?.(); return; }
     try {
       window.speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(line.replace(/\s+/g, " "));
+      const u = new SpeechSynthesisUtterance(line.replace(/[*_`#>]+/g, "").replace(/\s+/g, " "));
       const voices = window.speechSynthesis.getVoices();
       u.voice = voices.find((v) => /^en/i.test(v.lang) && /natural|google|samantha|aria|jenny/i.test(v.name)) ?? voices.find((v) => /^en/i.test(v.lang)) ?? null;
       u.lang = u.voice?.lang ?? "en-US";
@@ -97,7 +97,7 @@ export function VoiceAssistant() {
   const add = (role: Msg["role"], t: string) => setMsgs((m) => [...m, { role, text: t }]);
 
   const runAction = useCallback((a: Action) => {
-    if (a.type === "open_wallet") window.dispatchEvent(new CustomEvent(OPEN_WALLET_EVENT));
+    if (a.type === "open_wallet") { if (a.tab) requestWalletTab(a.tab); window.dispatchEvent(new CustomEvent(OPEN_WALLET_EVENT)); }
     else router.push(a.path);
   }, [router]);
 
@@ -227,6 +227,16 @@ export function VoiceAssistant() {
   };
 
   const cancel = () => { setProposal(null); proposalRef.current = null; const line = "Okay, cancelled. Nothing was changed."; add("assistant", line); speak(line, keepListening); };
+  // TEMPORARY (for tuning the assistant): copy the whole conversation so it can be pasted into a message. Remove when done.
+  const [copied, setCopied] = useState(false);
+  const copyChat = async () => {
+    const lines = msgsRef.current.map((m) => `${m.role === "user" ? "Me" : "Assistant"}: ${m.text}`);
+    if (proposalRef.current) lines.push(`[Confirm card shown] ${proposalRef.current.summary}`);
+    const body = `Voice assistant chat (${new Date().toLocaleString()}), speech language ${langRef.current}, voice input ${supported ? "supported" : "not supported"}\n\n${lines.join("\n")}`;
+    try { await navigator.clipboard.writeText(body); }
+    catch { const t = document.createElement("textarea"); t.value = body; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch { /* ignore */ } t.remove(); }
+    setCopied(true); setTimeout(() => setCopied(false), 1800);
+  };
   const toggleSpeak = () => { const n = !speakOn; setSpeakOn(n); if (!n) stopSpeaking(); try { localStorage.setItem(STORE_SPEAK, n ? "1" : "0"); } catch { /* ignore */ } };
   const toggleOpen = () => { if (open) stopAll(); setOpen(!open); };
   const micTap = () => {
@@ -250,6 +260,8 @@ export function VoiceAssistant() {
               className="h-8 max-w-[5.5rem] rounded-lg border border-white/15 bg-white/10 px-1.5 text-[11px] font-semibold text-slate-100 outline-none">
               {LANGS.map(([c, n]) => <option key={c} value={c} className="bg-[#0E1424]">{n}</option>)}
             </select>
+            <button onClick={copyChat} aria-label="Copy the whole chat" title="Copy the whole chat" data-testid="voice-copy"
+              className="grid h-8 w-8 place-items-center rounded-full text-slate-300 hover:bg-white/10">{copied ? <Check className="h-4 w-4 text-emerald-300" /> : <ClipboardCopy className="h-4 w-4" />}</button>
             <button onClick={toggleSpeak} aria-label={speakOn ? "Mute voice replies" : "Turn voice replies on"} className="grid h-8 w-8 place-items-center rounded-full text-slate-300 hover:bg-white/10">{speakOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}</button>
             <button onClick={toggleOpen} aria-label="Close assistant" className="grid h-8 w-8 place-items-center rounded-full text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button>
           </header>

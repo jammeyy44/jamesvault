@@ -23,6 +23,8 @@ type History = { orders: Order[]; ledger: { id: number; kind: string; bucket?: s
 export const WALLET_EVENT = "jv-wallet-changed";
 export const OPEN_WALLET_EVENT = "jv-open-wallet";
 export const notifyWalletChanged = () => window.dispatchEvent(new Event(WALLET_EVENT));
+let walletTabRequest: "deposit" | "cashout" | null = null;   // set just before opening the wallet; read once when it mounts
+export const requestWalletTab = (t: "deposit" | "cashout") => { walletTabRequest = t; };
 
 const money = (v: string | number) => `$${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -63,7 +65,7 @@ function Tile({ m, active, onClick }: { m: Method; active: boolean; onClick: () 
 export function WalletBody() {
   const [w, setW] = useState<WalletState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"deposit" | "cashout">("deposit");
+  const [tab, setTab] = useState<"deposit" | "cashout">(() => { const t = walletTabRequest ?? "deposit"; walletTabRequest = null; return t; });
   const load = useCallback(async () => {
     try { setW(await api<WalletState>("/wallet")); setError(null); } catch (e) { setError(errorMessage(e)); }
   }, []);
