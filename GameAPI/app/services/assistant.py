@@ -8,7 +8,7 @@ import json
 import logging
 from decimal import Decimal, InvalidOperation
 
-from flask import current_app
+from flask import current_app, g as _g
 
 from app.models_site import CatalogGame, GameAccount
 from app.services import assistant_llm, wallet as ledger
@@ -107,7 +107,15 @@ def _find_game(name):
         close = difflib.get_close_matches(squash(name), list(by_name), n=2, cutoff=0.62)
         hits = [by_name[c] for c in close[:1]]
     if len(hits) == 1:
-        return hits[0], None
+        hit = hits[0]
+        # speech-to-text drops the "2" ("juaa to", "judwaa 2"): when the player's own words say two and a "<name> 2" game exists, that is the one
+        said = str(getattr(_g, "assistant_said", "") or "").lower()
+        import re
+        if said and not hit.name.endswith("2") and re.search(r"(\b(2|two|too|second|2\.0|20)\b)|(\b(juaa|jua|juwa|judwaa|zua|jio|joywa)\s+to\b)", said):
+            sib = [x for x in games if x.name.lower() == hit.name.lower() + " 2"]
+            if sib:
+                return sib[0], None
+        return hit, None
     if not hits:
         return None, "I couldn't find that game. Available games: " + ", ".join(g.name for g in games[:8])
     return None, "That could be " + " or ".join(g.name for g in hits[:4]) + ". Which one?"
@@ -507,6 +515,23 @@ def infer_navigation(player, text):
     return None
 
 
+def knowledge_block(player):
+    """What the Bonus Zone really contains, straight from the database, so the assistant never has to guess."""
+    from app.models_site import BonusBox, BonusTask, WheelPrize
+    boxes = BonusBox.query.filter_by(is_active=True).order_by(BonusBox.sort_order).all()
+    tasks = BonusTask.query.filter_by(is_active=True).order_by(BonusTask.sort_order).all()
+    wheel = WheelPrize.query.filter_by(is_active=True).all()
+    lines = [f"- Diamonds: the player has {player.diamonds}. Diamonds are earned from tasks and spent on Lucky Shop boxes."]
+    if boxes:
+        lines.append("- Lucky Shop boxes (each holds ONE fixed, disclosed prize, no random draw; opened by tapping it, which costs diamonds): "
+                     + "; ".join(f"{b.name} costs {b.cost_diamonds} diamonds and gives {b.prize_label}" for b in boxes) + ". Free Play and Bonus prizes go to the bonus balance, which can be loaded into games.")
+    if tasks:
+        lines.append("- Diamond tasks: " + "; ".join(f"{t.title} (+{t.reward_diamonds})" for t in tasks[:12]) + ".")
+    if wheel:
+        lines.append("- Free spin wheel: unlocked by a confirmed deposit, one spin every 24 hours, the prize is applied instantly. Possible prizes: " + ", ".join(w.title for w in wheel) + ".")
+    return "\n".join(lines)
+
+
 def system_prompt(player, last_text=""):
     from app.routes.site.accounts import cash_bonus_info
     info = cash_bonus_info(player)
@@ -520,6 +545,8 @@ reply in one or two short, friendly sentences, plain words, no lists, never use 
 Facts about this player (trust these, they come straight from the database): wallet {_money(Decimal(player.wallet_cents) / 100)}, bonus balance {_money(Decimal(player.bonus_cents) / 100)}, \
 email verified: {'yes' if info['email_verified'] else 'no'}, username {player.username}.
 Bonus status: {bonus_status(player)}.
+Bonus Zone facts (exact; quote these, and only say you are unsure about things not listed here):
+{knowledge_block(player)}
 Their games, with exact cashout facts (read the numbers from here; do not calculate or guess):
 {facts_block(player, last_text)}
 
@@ -575,6 +602,7 @@ def clean_history(raw):
 
 def converse(player, history):
     """Returns {"reply": str, "proposals": [...], "actions": [...]}. Raises assistant_llm.AssistantUnavailable."""
+    _g.assistant_said = history[-1]["content"] if history else ""
     messages = [{"role": "system", "content": system_prompt(player, history[-1]["content"] if history else "")}] + history
     proposals, actions, reply = [], [], ""
     for _ in range(MAX_ROUNDS):

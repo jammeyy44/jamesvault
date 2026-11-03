@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft, ArrowRight, Check, Copy, Download, Eye, EyeOff, FileText, FlaskConical, Gift, Info,
@@ -113,15 +113,18 @@ export default function FullscreenGamePage() {
   };
 
   useEffect(() => { try { localStorage.setItem("jv-last-game", slug); } catch { /* private mode */ } }, [slug]);
-  const openedCash = useRef(false);
-  useEffect(() => { openedCash.current = false; setStep("dashboard"); setAccess(null); }, [slug]); // switching game starts that game fresh
+  const search = useSearchParams();
+  const appliedSig = useRef("");
+  useEffect(() => { appliedSig.current = ""; setStep("dashboard"); setAccess(null); }, [slug]); // switching game starts that game fresh
   useEffect(() => {
-    if (openedCash.current || !access?.account) return;
-    if (typeof window === "undefined") return;
-    const q = new URLSearchParams(window.location.search);
-    if (q.get("add") === "1") { openedCash.current = true; setStep("cash"); }
-    else if (q.get("cashout") === "1") { openedCash.current = true; setStep("redeem"); }
-  }, [access]);
+    // ?add=1 opens Add Cash and ?cashout=1 opens Cash Out, every time the URL changes (also when this game is already open)
+    if (!access?.account) return;
+    const sig = `${slug}|${search.toString()}`;
+    if (sig === appliedSig.current) return;
+    appliedSig.current = sig;
+    if (search.get("add") === "1") setStep("cash");
+    else if (search.get("cashout") === "1") setStep("redeem");
+  }, [access, search, slug]);
 
   const loadAccess = useCallback(async () => {
     try {

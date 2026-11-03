@@ -361,3 +361,29 @@ def test_infer_navigation_maps_words_to_places(api, make_player):
     assert infer_navigation(player, "open my wallet")[0] == {"type": "open_wallet"}
     assert infer_navigation(player, "talk to a live operator")[0] == {"type": "open_live_chat"}
     assert infer_navigation(player, "what is the weather") is None
+
+
+# ------------------------------------------------------------------ "Juwa two", and what the Bonus Zone really has
+def test_two_dropped_by_speech_to_text_still_means_the_second_game(api, make_player, ai):
+    from flask import g
+    from app.services.assistant import _find_game
+    make_player(api)
+    _games("Juwa", "Juwa 2", "Game Vault")
+    for said, slug in (("I want Judwaa 2", "juwa-2"), ("open juaa to", "juwa-2"), ("open juwa two please", "juwa-2"), ("open juwa", "juwa"), ("go to my game hault page", "game-vault")):
+        g.assistant_said = said
+        hit, err = _find_game("Juwa" if "ju" in said.lower() and "game" not in said.lower() else "game vault")
+        assert hit is not None and hit.slug == slug, (said, hit and hit.slug, err)
+    g.assistant_said = ""
+
+
+def test_the_prompt_lists_the_real_boxes_tasks_and_wheel(api, make_player, ai):
+    from app.models_site import BonusBox, BonusTask, WheelPrize
+    p = make_player(api)
+    db.session.add(BonusBox(name="Lucky Gift", cost_diamonds=5, prize_kind="freeplay", prize_cents=200))
+    db.session.add(BonusTask(key="t1", title="Confirm Email", reward_diamonds=2))
+    db.session.add(WheelPrize(label="", kind="diamonds", value=3, weight=1))
+    db.session.commit()
+    fake = ai(say("ok"))
+    ask(api, "what is inside the box")
+    prompt = fake.seen[0][0]["content"]
+    assert "Lucky Gift costs 5 diamonds and gives $2 Free Play" in prompt and "Confirm Email (+2)" in prompt and "one spin every 24 hours" in prompt

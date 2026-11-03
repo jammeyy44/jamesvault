@@ -121,7 +121,7 @@ export function VoiceAssistant() {
   const runAction = useCallback((a: Action) => {
     if (a.type === "open_wallet") { if (a.tab) requestWalletTab(a.tab); window.dispatchEvent(new CustomEvent(OPEN_WALLET_EVENT)); }
     else if (a.type === "open_live_chat") window.dispatchEvent(new CustomEvent("jv-open-live-chat"));
-    else router.push(a.path);
+    else router.push(a.path.startsWith("/game/") ? `${a.path}${a.path.includes("?") ? "&" : "?"}t=${Date.now()}` : a.path);   // a new marker so a repeated request re-opens the screen
     setMini(true);   // let the player see the page; the microphone stays on
   }, [router]);
 
@@ -162,7 +162,7 @@ export function VoiceAssistant() {
         return;
       }
       if (e.error === "no-speech" && handsFreeRef.current) {   // silence while hands-free: wait a little, then give up politely
-        if (retriesRef.current < 2) { retriesRef.current += 1; setTimeout(() => { if (handsFreeRef.current && !pendingMoney()) startListening(); }, 300); }
+        if (retriesRef.current < 3) { retriesRef.current += 1; setTimeout(() => { if (handsFreeRef.current && !pendingMoney()) startListening(); }, 300); }
         else { stopAll(); add("assistant", "I'll stop listening now. Tap the mic whenever you're ready."); }
         return;
       }
