@@ -117,3 +117,13 @@ def test_unreachable_database_is_a_clear_503_not_a_crash(api, monkeypatch):
                                            "password": "Sup3rSecret!x", "accept_terms": True})
     assert r.status_code == 503 and r.get_json()["code"] == "database_unavailable"
     assert "host name" not in r.get_data(as_text=True)  # driver details never reach the client
+
+
+def test_any_reasonable_password_is_accepted_not_just_mixed_ones(api, app):
+    for i, pw in enumerate(("9876543210", "mylongpassphrase", "ab12cd", "Jackpot2024")):
+        r = api.post('/api/v1/auth/register', {"username": f"player_{i}", "email": f"p{i}@example.com", "password": pw, "accept_terms": True})
+        assert r.status_code == 201, (pw, r.get_json())
+        api.post('/api/v1/auth/logout')
+    for bad in ("123456", "password", "aaaaaaaa", "Qwerty123", "abc"):
+        r = api.post('/api/v1/auth/register', {"username": "badpw", "email": "bad@example.com", "password": bad, "accept_terms": True})
+        assert r.status_code == 400, bad

@@ -129,7 +129,7 @@ function RegisterForm() {
             autoComplete="new-password"
             required
             minLength={6}
-            hint="At least 6 characters, mixing letters & numbers."
+            hint="At least 6 characters. Letters, numbers or symbols, anything you like."
             icon={<Lock className="h-4 w-4" />}
           />
 

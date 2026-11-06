@@ -30,6 +30,13 @@ def _body():
     return request.get_json(silent=True) or {}
 
 
+COMMON_PASSWORDS = {
+    "123456", "1234567", "12345678", "123456789", "1234567890", "654321", "111111", "000000", "123123", "121212", "112233", "123321",
+    "password", "password1", "passw0rd", "qwerty", "qwerty123", "qwertyuiop", "abc123", "abcdef", "abcd1234", "iloveyou", "admin", "letmein",
+    "welcome", "monkey", "dragon", "football", "baseball", "sunshine", "princess", "stakesweep", "casino", "jackpot",
+}
+
+
 def _password_problem(password, username=""):
     if not isinstance(password, str) or len(password) < 6:
         return "Password must be at least 6 characters."
@@ -37,8 +44,10 @@ def _password_problem(password, username=""):
         return "Password is too long."
     if username and password.lower() == username.lower():
         return "Password must not match your username."
-    if password.isdigit() or password.isalpha():
-        return "Use a mix of letters and numbers or symbols."
+    # No "mix of letters and numbers" rule (players kept hitting it with a phone number or a plain word). Only passwords that
+    # anyone would try first are refused: a very common one, or the same character repeated.
+    if password.lower() in COMMON_PASSWORDS or len(set(password)) == 1:
+        return "That password is too easy to guess. Please choose another."
     return None
 
 
