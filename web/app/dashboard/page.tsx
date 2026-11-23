@@ -15,7 +15,7 @@ import { useAuth } from "@/lib/auth";
 import { cn, formatDate } from "@/lib/utils";
 
 const TABS = [
-  ["overview", "Overview", Sparkles], ["wallet", "Wallet", Wallet], ["rewards", "Rewards", Gift],
+  ["rewards", "Rewards", Gift],
   ["notifications", "Notifications", Bell], ["support", "Support", LifeBuoy], ["security", "Security", ShieldCheck],
 ] as const;
 
@@ -23,19 +23,21 @@ function Dashboard() {
   const router = useRouter();
   const params = useSearchParams();
   const { player, loading } = useAuth();
-  const tab = params.get("tab") ?? "overview";
+  const tab = params.get("tab") ?? "";
+  const known = TABS.some(([k]) => k === tab);
 
   useEffect(() => { if (!loading && !player) router.replace("/login"); }, [loading, player, router]);
-  if (loading || !player) return <div className="container-x py-10"><Skeleton className="h-96" /></div>;
+  useEffect(() => { if (!known) router.replace("/"); }, [known, router]);   // there is no dashboard home page any more: go to the site's homepage
+  if (loading || !player || !known) return <div className="container-x py-10"><Skeleton className="h-96" /></div>;
 
   return (
     <div className="container-x py-10">
       <div className="mb-8">
-        <p className="text-sm font-semibold uppercase tracking-wider text-primary">Dashboard</p>
+        <p className="text-sm font-semibold uppercase tracking-wider text-primary">My account</p>
         <h1 className="text-3xl font-extrabold">Hi, {player.username}</h1>
       </div>
       <div className="grid gap-6 lg:grid-cols-[14rem_1fr]">
-        <nav aria-label="Dashboard" className="flex gap-1 overflow-x-auto lg:flex-col">
+        <nav aria-label="My account" className="flex gap-1 overflow-x-auto lg:flex-col">
           {TABS.map(([key, label, Icon]) => (
             <Link key={key} href={`/dashboard?tab=${key}`} scroll={false}
               className={cn("flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition",
@@ -45,8 +47,6 @@ function Dashboard() {
           ))}
         </nav>
         <section className="min-w-0">
-          {tab === "overview" && <Overview />}
-          {tab === "wallet" && <WalletTab />}
           {tab === "rewards" && <RewardsTab />}
           {tab === "notifications" && <NotificationsTab />}
           {tab === "support" && <SupportTab />}

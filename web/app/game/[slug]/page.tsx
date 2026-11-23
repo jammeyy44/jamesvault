@@ -685,7 +685,7 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
                 <span className={cn("rounded-full border px-2.5 py-1 text-[11px] font-black", !state.cash_bonus.email_verified || state.cash_bonus.kind === "signup" ? "border-[#ffd966]/50 bg-[#ffd966]/15 text-[#ffd966]" : "border-white/10 bg-white/5 text-slate-400 line-through")}>+{state.cash_bonus.signup_percent}% first add</span>
                 <span className={cn("rounded-full border px-2.5 py-1 text-[11px] font-black", state.cash_bonus.kind === "regular" ? "border-[#ffd966]/50 bg-[#ffd966]/15 text-[#ffd966]" : "border-white/15 bg-white/5 text-slate-200")}>+{state.cash_bonus.regular_percent}% every add</span>
                 {!state.cash_bonus.email_verified && (
-                  <Link href="/dashboard" className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#ffd966] to-[#f59e0b] px-3.5 py-1.5 text-[11px] font-black text-slate-950 shadow-md transition hover:brightness-110 active:scale-95">
+                  <Link href="/verify-email" className="ml-auto inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#ffd966] to-[#f59e0b] px-3.5 py-1.5 text-[11px] font-black text-slate-950 shadow-md transition hover:brightness-110 active:scale-95">
                     <MailCheck className="h-3.5 w-3.5" /> Verify email
                   </Link>
                 )}

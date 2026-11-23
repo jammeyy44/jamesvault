@@ -108,7 +108,7 @@ export default function AdminPage() {
     return (
       <div className="container-x py-10">
         <EmptyState title="You don't have access to the admin panel">
-          This area is for staff accounts. <Link href="/dashboard" className="font-semibold text-primary">Back to your dashboard</Link>
+          This area is for staff accounts. <Link href="/" className="font-semibold text-primary">Back to the homepage</Link>
         </EmptyState>
       </div>
     );

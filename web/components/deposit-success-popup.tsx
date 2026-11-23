@@ -105,7 +105,7 @@ export function DepositSuccessPopup() {
             <Gamepad2 className="h-5 w-5" /> {lastGame ? "Go to my game & add cash" : "Choose a game & add cash"}
           </Link>
           {!verified && (
-            <Link href="/dashboard" onClick={() => setDeposit(null)} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-[#ffd966]/40 bg-[#ffd966]/10 text-sm font-bold text-[#ffd966] transition hover:bg-[#ffd966]/20">
+            <Link href="/verify-email" onClick={() => setDeposit(null)} className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-[#ffd966]/40 bg-[#ffd966]/10 text-sm font-bold text-[#ffd966] transition hover:bg-[#ffd966]/20">
               <MailCheck className="h-4 w-4" /> Verify email for the 50% bonus
             </Link>
           )}

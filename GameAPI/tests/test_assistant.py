@@ -341,7 +341,7 @@ def test_a_claimed_but_missing_open_is_done_from_the_players_words(api, make_pla
     ai(say("The withdrawal screen should be open now."))
     assert ask(api, "open withdrawal and select method").get_json()["actions"] == [{"type": "open_wallet", "tab": "cashout"}]
     ai(say("I'm not sure which account you mean."))                    # an "open ..." request that was ignored
-    assert ask(api, "open to account").get_json()["actions"] == [{"type": "navigate", "path": "/dashboard"}]
+    assert ask(api, "open to account").get_json()["actions"] == [{"type": "navigate", "path": "/dashboard?tab=security"}]
     ai(say("I've opened the moon page."))                              # nothing real matches: say so, do not pretend
     r = ask(api, "ok then").get_json()
     assert r["actions"] == [] and "couldn't open" in r["reply"]

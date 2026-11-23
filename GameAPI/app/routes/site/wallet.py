@@ -164,7 +164,7 @@ def create_deposit():
         return jsonify(_deposit_view(prior)) if prior else json_error("Please try again.", 409)
 
     frontend = current_app.config["FRONTEND_URL"].rstrip("/")
-    return_url = f"{frontend}/dashboard?tab=wallet" if frontend.startswith("https://") and len(frontend) < 100 else None
+    return_url = f"{frontend}/" if frontend.startswith("https://") and len(frontend) < 100 else None
     try:
         resp = payments.create_deposit(method_id=method["id"], amount=amount, customer_ip=ip,
                                        device_fingerprint=fingerprint, user_name=player.username,

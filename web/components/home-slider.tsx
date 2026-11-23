@@ -13,7 +13,7 @@ const AUTOPLAY_MS = 7500;
 export function HomeSlider() {
   const reduce = useReducedMotion();
   const { player } = useAuth();
-  const claimHref = !player ? "/register" : !player.email_verified ? "/dashboard" : "/games";
+  const claimHref = !player ? "/register" : !player.email_verified ? "/verify-email" : "/games";
   const [index, setIndex] = useState(0);
   const [dir, setDir] = useState(1);
   const [paused, setPaused] = useState(false);

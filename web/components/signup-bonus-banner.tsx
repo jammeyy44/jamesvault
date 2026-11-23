@@ -23,7 +23,7 @@ function Gift({ className }: { className?: string }) {
 /** Footer promo strip: the signup bonus. Stacked on phones (icon + headline, text, full-width button), one row on larger screens. */
 export function SignupBonusBanner() {
   const { player } = useAuth();
-  const href = !player ? "/register" : !player.email_verified ? "/dashboard" : "/games";
+  const href = !player ? "/register" : !player.email_verified ? "/verify-email" : "/games";
   const label = !player ? "Claim now" : !player.email_verified ? "Verify email" : "Add cash";
   return (
     <section aria-label="Signup bonus" data-testid="signup-bonus-banner"

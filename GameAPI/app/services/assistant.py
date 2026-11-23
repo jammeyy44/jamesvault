@@ -64,7 +64,7 @@ TOOLS = [
 ]
 
 PAGES = {"home": "/", "games": "/games", "bonus_zone": "/bonus-zone", "refer": "/refer", "support": "/support",
-         "dashboard": "/dashboard", "cashout_rules": "/cashout-rules"}
+         "dashboard": "/dashboard?tab=security", "cashout_rules": "/cashout-rules"}
 
 
 def _money(v):
@@ -506,12 +506,12 @@ def infer_navigation(player, text):
     for rx, action, label in rules:
         if re.search(rx, t):
             return action, label
-    for rx, path, label in ((r"\b(dashboard|my account|account page|profile|notifications?|settings)\b", "/dashboard", "your account"),
+    for rx, path, label in ((r"\b(dashboard|my account|account page|profile|notifications?|settings)\b", "/dashboard?tab=security", "your account settings"),
                             (r"\b(games|lobby|all games)\b", "/games", "the games"), (r"\b(home|main page)\b", "/", "the home page")):
         if re.search(rx, t):
             return {"type": "navigate", "path": path}, label
     if re.search(r"\baccount\b", t):
-        return {"type": "navigate", "path": "/dashboard"}, "your account"
+        return {"type": "navigate", "path": "/dashboard?tab=security"}, "your account settings"
     return None
 
 

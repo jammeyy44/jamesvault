@@ -1,10 +1,33 @@
 "use client";
 
 import Link from "next/link";
+import { Banknote, Compass, FileText, Gamepad2, Gift, Home, LifeBuoy, Lock, ShieldCheck, Users, type LucideIcon } from "lucide-react";
 import { Logo } from "./logo";
 import { brand, navLinks } from "@/lib/brand";
 import { OPEN_WALLET_EVENT } from "./wallet-panel";
 import { SignupBonusBanner } from "./signup-bonus-banner";
+
+const EXPLORE_ICONS: Record<string, LucideIcon> = { "/": Home, "/games": Gamepad2, "/bonus-zone": Gift, "/refer": Users };
+
+function LinkGroup({ label, links }: { label: string; links: { href: string; label: string; icon: LucideIcon }[] }) {
+  return (
+    <nav aria-label={label}>
+      <h2 className="mb-2.5 flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
+        <span className="h-3 w-0.5 rounded-full bg-gradient-to-b from-[#8B5CF6] to-[#38BDF8]" />{label}
+      </h2>
+      <ul className="flex flex-wrap gap-2">
+        {links.map(({ href, label: text, icon: Icon }) => (
+          <li key={href}>
+            <Link href={href}
+              className="group inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[13px] font-semibold text-slate-300 transition hover:-translate-y-0.5 hover:border-sky-400/40 hover:bg-sky-400/10 hover:text-white">
+              <Icon className="h-3.5 w-3.5 text-slate-500 transition group-hover:text-sky-300" />{text}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
 
 export function Footer() {
   const openDeposit = () => {
@@ -17,54 +40,21 @@ export function Footer() {
     <footer className="mt-20 border-t border-white/10 bg-[#080B12] text-slate-300">
       <div className="container-x py-12">
         <SignupBonusBanner />
-        {/* Navigation & brand links */}
-        <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr] pb-10">
-          <div>
-            <Logo size={72} />
-            <p className="mt-4 max-w-sm text-sm text-slate-400">{brand.description}</p>
+        {/* Brand + links: one compact card, links as tappable chips (two short rows instead of two long lists) */}
+        <div className="mb-8 grid gap-6 rounded-3xl border border-white/10 bg-gradient-to-br from-[#11162a] via-[#0d1222] to-[#0b0f1c] p-5 shadow-card sm:p-6 lg:grid-cols-[auto_1fr] lg:items-center lg:gap-10">
+          <div className="flex items-center gap-4 lg:max-w-xs">
+            <Logo size={56} />
+            <p className="text-[13px] leading-relaxed text-slate-400">{brand.description}</p>
           </div>
-          <nav aria-label="Explore">
-            <h2 className="mb-3 text-sm font-bold text-white">Explore</h2>
-            <ul className="space-y-2 text-sm text-slate-400">
-              {navLinks.map((l) => (
-                <li key={l.href}>
-                  <Link className="hover:text-sky-400 transition" href={l.href}>
-                    {l.label}
-                  </Link>
-                </li>
-              ))}
-              <li>
-                <Link className="hover:text-sky-400 transition" href="/support">
-                  Help &amp; Support
-                </Link>
-              </li>
-            </ul>
-          </nav>
-          <nav aria-label="Legal">
-            <h2 className="mb-3 text-sm font-bold text-white">Legal &amp; safety</h2>
-            <ul className="space-y-2 text-sm text-slate-400">
-              <li>
-                <Link className="hover:text-sky-400 transition" href="/legal/terms">
-                  Terms &amp; Conditions
-                </Link>
-              </li>
-              <li>
-                <Link className="hover:text-sky-400 transition" href="/legal/privacy">
-                  Privacy Policy
-                </Link>
-              </li>
-              <li>
-                <Link className="hover:text-sky-400 transition" href="/cashout-rules">
-                  Cashout Rules
-                </Link>
-              </li>
-              <li>
-                <Link className="hover:text-sky-400 transition" href="/legal/responsible-gaming">
-                  Responsible Gaming
-                </Link>
-              </li>
-            </ul>
-          </nav>
+          <div className="grid gap-5 sm:grid-cols-2">
+            <LinkGroup label="Explore" links={[...navLinks.map((l) => ({ href: l.href, label: l.label, icon: EXPLORE_ICONS[l.href] ?? Compass })), { href: "/support", label: "Help & Support", icon: LifeBuoy }]} />
+            <LinkGroup label="Legal & safety" links={[
+              { href: "/legal/terms", label: "Terms", icon: FileText },
+              { href: "/legal/privacy", label: "Privacy", icon: Lock },
+              { href: "/cashout-rules", label: "Cashout rules", icon: Banknote },
+              { href: "/legal/responsible-gaming", label: "Responsible gaming", icon: ShieldCheck },
+            ]} />
+          </div>
         </div>
 
         {/* Regulatory, Licensing & Payment Methods Card (Matches Reference Screenshot) */}
