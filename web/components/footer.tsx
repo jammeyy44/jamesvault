@@ -1,26 +1,24 @@
 "use client";
 
 import Link from "next/link";
-import { Banknote, Compass, FileText, Gamepad2, Gift, Home, LifeBuoy, Lock, ShieldCheck, Users, type LucideIcon } from "lucide-react";
+import { ChevronRight, ShieldCheck, Zap } from "lucide-react";
 import { Logo } from "./logo";
 import { brand, navLinks } from "@/lib/brand";
 import { OPEN_WALLET_EVENT } from "./wallet-panel";
 import { SignupBonusBanner } from "./signup-bonus-banner";
 
-const EXPLORE_ICONS: Record<string, LucideIcon> = { "/": Home, "/games": Gamepad2, "/bonus-zone": Gift, "/refer": Users };
-
-function LinkGroup({ label, links }: { label: string; links: { href: string; label: string; icon: LucideIcon }[] }) {
+/** One footer column: a small heading with an accent line and quiet links that brighten (with a sliding chevron) on hover. */
+function FooterCol({ title, links }: { title: string; links: { href: string; label: string }[] }) {
   return (
-    <nav aria-label={label}>
-      <h2 className="mb-2.5 flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-500">
-        <span className="h-3 w-0.5 rounded-full bg-gradient-to-b from-[#8B5CF6] to-[#38BDF8]" />{label}
-      </h2>
-      <ul className="flex flex-wrap gap-2">
-        {links.map(({ href, label: text, icon: Icon }) => (
-          <li key={href}>
-            <Link href={href}
-              className="group inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[13px] font-semibold text-slate-300 transition hover:-translate-y-0.5 hover:border-sky-400/40 hover:bg-sky-400/10 hover:text-white">
-              <Icon className="h-3.5 w-3.5 text-slate-500 transition group-hover:text-sky-300" />{text}
+    <nav aria-label={title}>
+      <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-white">{title}</h2>
+      <span className="mt-2 block h-0.5 w-8 rounded-full bg-gradient-to-r from-[#8B5CF6] to-[#38BDF8]" aria-hidden />
+      <ul className="mt-4 space-y-2.5">
+        {links.map((l) => (
+          <li key={l.href}>
+            <Link href={l.href} className="group relative inline-flex items-center text-sm text-slate-400 transition hover:translate-x-1 hover:text-white">
+              <ChevronRight className="absolute -left-4 h-3.5 w-3.5 text-sky-400 opacity-0 transition group-hover:opacity-100" aria-hidden />
+              {l.label}
             </Link>
           </li>
         ))}
@@ -40,21 +38,24 @@ export function Footer() {
     <footer className="mt-20 border-t border-white/10 bg-[#080B12] text-slate-300">
       <div className="container-x py-12">
         <SignupBonusBanner />
-        {/* Brand + links: one compact card, links as tappable chips (two short rows instead of two long lists) */}
-        <div className="mb-8 grid gap-6 rounded-3xl border border-white/10 bg-gradient-to-br from-[#11162a] via-[#0d1222] to-[#0b0f1c] p-5 shadow-card sm:p-6 lg:grid-cols-[auto_1fr] lg:items-center lg:gap-10">
-          <div className="flex items-center gap-4 lg:max-w-xs">
-            <Logo size={56} />
-            <p className="text-[13px] leading-relaxed text-slate-400">{brand.description}</p>
+        {/* Brand + two link columns (side by side even on phones, so they stay short) */}
+        <div className="mb-8 grid grid-cols-2 gap-x-6 gap-y-8 border-b border-white/10 pb-8 md:grid-cols-[1.6fr_1fr_1fr] md:gap-10">
+          <div className="col-span-2 md:col-span-1">
+            <Logo size={60} />
+            <p className="mt-4 max-w-sm text-sm leading-relaxed text-slate-400">{brand.description}</p>
+            <div className="mt-4 flex flex-wrap gap-2 text-[11px] font-semibold text-slate-400">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1"><ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />Secure payments</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1"><Zap className="h-3.5 w-3.5 text-amber-300" />Instant game loads</span>
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1">18+ only</span>
+            </div>
           </div>
-          <div className="grid gap-5 sm:grid-cols-2">
-            <LinkGroup label="Explore" links={[...navLinks.map((l) => ({ href: l.href, label: l.label, icon: EXPLORE_ICONS[l.href] ?? Compass })), { href: "/support", label: "Help & Support", icon: LifeBuoy }]} />
-            <LinkGroup label="Legal & safety" links={[
-              { href: "/legal/terms", label: "Terms", icon: FileText },
-              { href: "/legal/privacy", label: "Privacy", icon: Lock },
-              { href: "/cashout-rules", label: "Cashout rules", icon: Banknote },
-              { href: "/legal/responsible-gaming", label: "Responsible gaming", icon: ShieldCheck },
-            ]} />
-          </div>
+          <FooterCol title="Explore" links={[...navLinks.map((l) => ({ href: l.href, label: l.label })), { href: "/support", label: "Help & Support" }]} />
+          <FooterCol title="Legal & safety" links={[
+            { href: "/legal/terms", label: "Terms & Conditions" },
+            { href: "/legal/privacy", label: "Privacy Policy" },
+            { href: "/cashout-rules", label: "Cashout Rules" },
+            { href: "/legal/responsible-gaming", label: "Responsible Gaming" },
+          ]} />
         </div>
 
         {/* Regulatory, Licensing & Payment Methods Card (Matches Reference Screenshot) */}

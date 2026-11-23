@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ClipboardCopy, Gift, Maximize2, Mic, Send, Volume2, VolumeX, X } from "lucide-react";
+import { Check, ClipboardCopy, Gift, Maximize2, Mic, Power, Send, Volume2, VolumeX, X } from "lucide-react";
 import { OPEN_WALLET_EVENT, deviceId, notifyWalletChanged, requestWalletTab } from "./wallet-panel";
 import { api, errorMessage } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -22,6 +22,13 @@ type Reply = { reply: string; proposals: Proposal[]; actions: Action[] };
 
 const money = (v: string | number) => `$${Number(v).toFixed(2)}`;
 const STORE_SPEAK = "jv-voice-speak";
+export const VOICE_OFF_KEY = "jv-voice-off";
+export const VOICE_TOGGLE_EVENT = "jv-voice-toggle";
+export const isVoiceOff = () => { try { return localStorage.getItem(VOICE_OFF_KEY) === "1"; } catch { return false; } };
+export const setVoiceOff = (off: boolean) => {
+  try { localStorage.setItem(VOICE_OFF_KEY, off ? "1" : "0"); } catch { /* ignore */ }
+  window.dispatchEvent(new CustomEvent(VOICE_TOGGLE_EVENT));
+};
 const STORE_LANG = "jv-voice-lang";
 const LANGS: [string, string][] = [["en-US", "English (US)"], ["en-IN", "English (India)"], ["en-GB", "English (UK)"], ["en-AU", "English (AU)"]];
 const STOP_WORDS = /^(stop|stop listening|stop talking|that'?s all|that is all|that will be all|goodbye|good bye|bye|bye bye|thanks bye|thank you bye|cancel listening|keep silent|be quiet|quiet|silence|shut up|enough)[.!\s]*$/i;
@@ -53,7 +60,8 @@ export function VoiceAssistant() {
   const [proposal, setProposal] = useState<Proposal | null>(null);
   const [busy, setBusy] = useState(false);
   const [handsFree, setHandsFree] = useState(false);
-  const [mini, setMini] = useState(false);   // after opening a page the panel shrinks to a slim bar so the page stays visible
+  const [mini, setMini] = useState(false);
+  const [userOff, setUserOff] = useState(false);   // the player switched the assistant off (side menu)   // after opening a page the panel shrinks to a slim bar so the page stays visible
   const [lang, setLang] = useState("en-US");
   const handsFreeRef = useRef(false);
   const langRef = useRef("en-US");
@@ -85,6 +93,12 @@ export function VoiceAssistant() {
     if (!player) { setEnabled(false); return; }
     api<{ enabled: boolean }>("/assistant/status").then((r) => setEnabled(r.enabled)).catch(() => setEnabled(false));
   }, [player]);
+  useEffect(() => {
+    const sync = () => setUserOff(isVoiceOff());
+    sync();
+    window.addEventListener(VOICE_TOGGLE_EVENT, sync);
+    return () => window.removeEventListener(VOICE_TOGGLE_EVENT, sync);
+  }, []);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [msgs, proposal, thinking]);
   useEffect(() => () => { try { recRef.current?.abort(); window.speechSynthesis?.cancel(); } catch { /* ignore */ } }, []);
 
@@ -303,6 +317,7 @@ export function VoiceAssistant() {
     setCopied(true); setTimeout(() => setCopied(false), 1800);
   };
   const toggleSpeak = () => { const n = !speakOn; setSpeakOn(n); if (!n) stopSpeaking(); try { localStorage.setItem(STORE_SPEAK, n ? "1" : "0"); } catch { /* ignore */ } };
+  useEffect(() => { if (userOff) { stopAll(); setOpen(false); } }, [userOff, stopAll]);   // switched off: stop listening and close
   const toggleOpen = () => { if (open) stopAll(); setMini(false); setOpen(!open); };
   confirmRef.current = confirm;
   cancelRef.current = cancel;
@@ -312,7 +327,7 @@ export function VoiceAssistant() {
   };
   const pickLang = (l: string) => { setLang(l); langRef.current = l; try { localStorage.setItem(STORE_LANG, l); } catch { /* ignore */ } };
 
-  if (!player || !enabled) return null;
+  if (!player || !enabled || userOff) return null;
   const hint = listening ? "Listening… just talk" : thinking ? "Thinking…" : speaking ? "Speaking… tap a message to stop" : handsFree ? "Hands-free: I'll listen again" : "Tap the mic and talk";
 
   return (
@@ -346,6 +361,8 @@ export function VoiceAssistant() {
             <button onClick={copyChat} aria-label="Copy the whole chat" title="Copy the whole chat" data-testid="voice-copy"
               className="grid h-8 w-8 place-items-center rounded-full text-slate-300 hover:bg-white/10">{copied ? <Check className="h-4 w-4 text-emerald-300" /> : <ClipboardCopy className="h-4 w-4" />}</button>
             <button onClick={toggleSpeak} aria-label={speakOn ? "Mute voice replies" : "Turn voice replies on"} className="grid h-8 w-8 place-items-center rounded-full text-slate-300 hover:bg-white/10">{speakOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}</button>
+            <button onClick={() => { if (window.confirm("Turn the voice assistant off? You can turn it back on from the menu.")) setVoiceOff(true); }} aria-label="Turn the voice assistant off" title="Turn the voice assistant off"
+              className="grid h-8 w-8 place-items-center rounded-full text-slate-300 hover:bg-white/10"><Power className="h-4 w-4" /></button>
             <button onClick={toggleOpen} aria-label="Close assistant" className="grid h-8 w-8 place-items-center rounded-full text-slate-300 hover:bg-white/10"><X className="h-4 w-4" /></button>
           </header>
 

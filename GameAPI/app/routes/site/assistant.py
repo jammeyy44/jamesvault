@@ -11,7 +11,7 @@ from . import site_bp
 @site_bp.route('/assistant/status')
 @player_required
 def assistant_status():
-    return jsonify({"enabled": bool(settings.api_key())})
+    return jsonify({"enabled": bool(settings.api_key()) and settings.is_enabled()})
 
 
 @site_bp.route('/assistant/chat', methods=['POST'])
@@ -19,8 +19,8 @@ def assistant_status():
 @rate_limit('assistant', 40, 600)
 def assistant_chat():
     player = current_player()
-    if not settings.api_key():
-        return json_error("The assistant is not set up yet.", 503, code="assistant_off")
+    if not settings.api_key() or not settings.is_enabled():
+        return json_error("The voice assistant is switched off right now.", 503, code="assistant_off")
     history = assistant.clean_history((request.get_json(silent=True) or {}).get('messages'))
     while history and history[0]["role"] != "user":
         history.pop(0)

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Gem, Info, Sparkles, X } from "lucide-react";
 import { Spinner } from "./ui/bits";
-import { api } from "@/lib/api";
+import { MINUTE, cachedApi, peekCached } from "@/lib/cache";
 
 type LimitsInfo = {
   table: { deposit: string; min: string; max: string }[];
@@ -23,7 +23,11 @@ export function CashoutLimitsModal({ onDone, confirmLabel = "I Understand", lead
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
-  useEffect(() => { api<LimitsInfo>("/cashout-rules").then(setInfo).catch(() => setFailed(true)); }, []);
+  useEffect(() => {
+    const saved = peekCached<LimitsInfo>("/cashout-rules");
+    if (saved) setInfo(saved);   // instant from the saved copy, refreshed in the background
+    cachedApi<LimitsInfo>("/cashout-rules", 30 * MINUTE).then(setInfo).catch(() => { if (!saved) setFailed(true); });
+  }, []);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { e.stopPropagation(); onDone(); } };
     document.addEventListener("keydown", onKey, true);

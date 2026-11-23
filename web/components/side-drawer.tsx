@@ -7,10 +7,12 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { 
   X, Home, Users, Headphones, LogOut, Wallet, Info, 
-  Gamepad2, ShieldCheck, ChevronRight, Bell, LogIn, UserPlus, Gem 
+  Gamepad2, ShieldCheck, ChevronRight, Bell, LogIn, UserPlus, Gem, Mic 
 } from "lucide-react";
 import { OPEN_WALLET_EVENT, WALLET_EVENT } from "./wallet-panel";
+import { VOICE_TOGGLE_EVENT, isVoiceOff, setVoiceOff } from "./voice-assistant";
 import { api } from "@/lib/api";
+import { MINUTE, cachedApi } from "@/lib/cache";
 import { Logo } from "./logo";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -28,6 +30,18 @@ export function SideDrawer({ open, onClose, balance }: SideDrawerProps) {
   const [mounted, setMounted] = useState(false);
   const [bonus, setBonus] = useState<string | null>(null);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const [voiceOn, setVoiceOn] = useState(true);
+  const [voiceAvailable, setVoiceAvailable] = useState(false);
+  useEffect(() => {
+    const sync = () => setVoiceOn(!isVoiceOff());
+    sync();
+    window.addEventListener(VOICE_TOGGLE_EVENT, sync);
+    return () => window.removeEventListener(VOICE_TOGGLE_EVENT, sync);
+  }, []);
+  useEffect(() => {
+    if (!player) { setVoiceAvailable(false); return; }
+    api<{ enabled: boolean }>("/assistant/status").then((r) => setVoiceAvailable(r.enabled)).catch(() => setVoiceAvailable(false));
+  }, [player]);
   const [rules, setRules] = useState<{ table: { made: string; wallet: string }[]; note: string; min: string } | null>(null);
 
   // Real bonus balance from the server, refreshed whenever the wallet changes.
@@ -42,7 +56,7 @@ export function SideDrawer({ open, onClose, balance }: SideDrawerProps) {
 
   const showBonusRules = () => {
     setRulesOpen(true);
-    if (!rules) api<{ bonus: { table: { made: string; wallet: string }[]; note: string; min: string } }>("/cashout-rules").then((r) => setRules(r.bonus)).catch(() => {});
+    if (!rules) cachedApi<{ bonus: { table: { made: string; wallet: string }[]; note: string; min: string } }>("/cashout-rules", 30 * MINUTE).then((r) => setRules(r.bonus)).catch(() => {});
   };
 
   useEffect(() => {
@@ -242,6 +256,15 @@ export function SideDrawer({ open, onClose, balance }: SideDrawerProps) {
                   active={pathname.includes("notifications")}
                   onClick={onClose}
                 />
+                {voiceAvailable && (
+                  <button type="button" role="switch" aria-checked={voiceOn} onClick={() => setVoiceOff(voiceOn)} data-testid="voice-toggle"
+                    className="flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/5">
+                    <span className="flex items-center gap-3"><Mic className="h-5 w-5 text-fuchsia-400" />Voice assistant</span>
+                    <span className={cn("relative h-6 w-11 rounded-full transition", voiceOn ? "bg-gradient-to-r from-[#e879f9] to-[#6366f1]" : "bg-white/15")}>
+                      <span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all", voiceOn ? "left-[22px]" : "left-0.5")} />
+                    </span>
+                  </button>
+                )}
               </div>
 
               {/* Live Operator Card */}

@@ -6,7 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { Bell, Check, ChevronDown, LayoutDashboard, LifeBuoy, LogOut, Menu, Shield, ShieldCheck, Wallet, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Logo } from "./logo";
-import { OPEN_WALLET_EVENT, WALLET_EVENT, WalletDrawer } from "./wallet-panel";
+import { OPEN_WALLET_EVENT, WALLET_EVENT, WalletDrawer, clearWalletCache, prefetchWallet } from "./wallet-panel";
+import { clearUserCache } from "@/lib/cache";
 import { SideDrawer } from "./side-drawer";
 import { api } from "@/lib/api";
 import { Button } from "./ui/button";
@@ -33,6 +34,13 @@ export function Header() {
   }, []);
   const dismissTip = () => { setTipSeen(true); try { localStorage.setItem("jv-wallet-tip", "1"); } catch { /* ignore */ } };
   const openWallet = () => { dismissTip(); setWalletOpen(true); };
+
+  // Load the wallet's payment options in the background right after sign-in, so the wallet opens instantly.
+  useEffect(() => {
+    if (!player) { clearWalletCache(); clearUserCache(); return; }
+    const t = setTimeout(() => { prefetchWallet().catch(() => {}); }, 400);
+    return () => clearTimeout(t);
+  }, [player]);
 
   // Header balance chip: always read fresh from the server, refreshed whenever the wallet changes.
   useEffect(() => {

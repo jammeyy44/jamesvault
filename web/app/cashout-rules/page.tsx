@@ -1,7 +1,7 @@
 "use client";
 
 import { Skeleton, ErrorState } from "@/components/ui/bits";
-import { useApi } from "@/lib/use-api";
+import { MINUTE, useCachedApi } from "@/lib/cache";
 
 type Rules = {
   table: { deposit: string; min: string; max: string }[]; note: string;
@@ -10,7 +10,7 @@ type Rules = {
 };
 
 export default function CashoutRulesPage() {
-  const { data, error, loading } = useApi<Rules>("/cashout-rules");
+  const { data, error, loading } = useCachedApi<Rules>("/cashout-rules", 30 * MINUTE);
   return (
     <div className="container-x max-w-3xl py-10">
       <h1 className="text-3xl font-extrabold">Cashout rules</h1>

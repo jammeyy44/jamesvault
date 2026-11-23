@@ -405,7 +405,7 @@ function PlayerDetails({ id, onClose }: { id: number; onClose: () => void }) {
 }
 
 // ---------------------------------------------------------------- voice assistant key
-type AssistantView = { provider: string; providers: Record<string, { label: string; model: string; default_model: string; key_set: boolean; key_hint: string | null; source: string | null; prefix: string }> };
+type AssistantView = { provider: string; enabled: boolean; providers: Record<string, { label: string; model: string; default_model: string; key_set: boolean; key_hint: string | null; source: string | null; prefix: string }> };
 
 function AssistantSettings() {
   const [v, setV] = useState<AssistantView | null>(null);
@@ -436,6 +436,13 @@ function AssistantSettings() {
     try { const r = await api<{ ok: boolean; message: string }>("/admin/assistant-settings/test", { method: "POST", body: { provider } }); setMsg({ tone: r.ok ? "success" : "error", text: r.message }); }
     catch (e) { setMsg({ tone: "error", text: errorMessage(e) }); } finally { setBusy(false); }
   };
+  const toggleEnabled = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api<AssistantView>("/admin/assistant-settings", { method: "PUT", body: { provider, enabled: !v.enabled } });
+      setV(r); setMsg({ tone: "success", text: r.enabled ? "The voice assistant is ON for players." : "The voice assistant is OFF: players no longer see the mic button." });
+    } catch (e) { setMsg({ tone: "error", text: errorMessage(e) }); } finally { setBusy(false); }
+  };
   const remove = async () => {
     if (!confirm("Remove the saved key?")) return;
     setBusy(true); setMsg(null);
@@ -453,6 +460,14 @@ function AssistantSettings() {
             <p className="text-sm text-slate-400">Paste the API key here. It is stored encrypted, is never shown again, and is used only by the server. You can also set it in the server&apos;s <code>.env</code>; a key saved here takes priority.</p>
           </div>
         </div>
+
+        <button type="button" role="switch" aria-checked={v.enabled} onClick={toggleEnabled} disabled={busy} data-testid="assistant-enabled"
+          className="mt-5 flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left transition hover:bg-white/[0.07] disabled:opacity-60">
+          <span><span className="block text-sm font-bold">Voice assistant for players</span><span className="block text-xs text-slate-400">{v.enabled ? "On: signed-in players see the mic button." : "Off: the mic button is hidden for everyone."}</span></span>
+          <span className={cn("relative h-7 w-12 shrink-0 rounded-full transition", v.enabled ? "bg-gradient-to-r from-[#8B5CF6] to-[#4F46E5]" : "bg-white/15")}>
+            <span className={cn("absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all", v.enabled ? "left-6" : "left-1")} />
+          </span>
+        </button>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <label className="block"><span className="label">Provider</span>

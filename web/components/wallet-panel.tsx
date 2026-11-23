@@ -62,12 +62,24 @@ function Tile({ m, active, onClick }: { m: Method; active: boolean; onClick: () 
   );
 }
 
+// The wallet's data (balances + payment methods) is fetched in the background as soon as the player is signed in and kept here,
+// so opening the wallet shows the payment options instantly; it is refreshed while the wallet is open.
+let walletCache: WalletState | null = null;
+let walletInflight: Promise<WalletState> | null = null;
+export function prefetchWallet(): Promise<WalletState> {
+  if (!walletInflight) {
+    walletInflight = api<WalletState>("/wallet").then((w) => { walletCache = w; return w; }).finally(() => { walletInflight = null; });
+  }
+  return walletInflight;
+}
+export const clearWalletCache = () => { walletCache = null; };
+
 export function WalletBody() {
-  const [w, setW] = useState<WalletState | null>(null);
+  const [w, setW] = useState<WalletState | null>(walletCache);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"deposit" | "cashout">(() => { const t = walletTabRequest ?? "deposit"; walletTabRequest = null; return t; });
   const load = useCallback(async () => {
-    try { setW(await api<WalletState>("/wallet")); setError(null); } catch (e) { setError(errorMessage(e)); }
+    try { setW(await prefetchWallet()); setError(null); } catch (e) { if (!walletCache) setError(errorMessage(e)); }
   }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {   // a deposit confirmed by the payment provider shows up while the wallet is open

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowRight, Gift, ShieldCheck, Users } from "lucide-react";
 import { GameGrid } from "./game-grid";
-import { useApi } from "@/lib/use-api";
+import { MINUTE, useCachedApi } from "@/lib/cache";
 
 export function FourDotsIcon({ className = "h-5 w-5 text-sky-400" }: { className?: string }) {
   return (
@@ -36,7 +36,7 @@ export function Eyebrow({ label, title, href, cta, icon }: { label?: string; tit
 }
 
 export function GameCount() {
-  const { data } = useApi<{ total: number }>("/games?per_page=1");
+  const { data } = useCachedApi<{ total: number }>("/games?per_page=1", 10 * MINUTE);
   if (!data || data.total < 1) return null;
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-[#131927] px-3 py-1.5 text-xs font-bold text-slate-200 shadow-sm">

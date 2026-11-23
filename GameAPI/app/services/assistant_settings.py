@@ -33,6 +33,15 @@ def _set(key, value, admin_id=None):
     row.value, row.updated_at, row.updated_by = value, utcnow(), admin_id
 
 
+def is_enabled():
+    """The admin's on/off switch for players (on unless switched off)."""
+    return _get("assistant.enabled") != "0"
+
+
+def set_enabled(on, admin_id=None):
+    _set("assistant.enabled", "1" if on else "0", admin_id)
+
+
 def provider():
     p = _get("assistant.provider") or "nvidia"
     return p if p in PROVIDERS else "nvidia"
@@ -57,7 +66,7 @@ def key_source(p):
 
 def public_view():
     """What the admin page may see. Never the key itself."""
-    out = {"provider": provider(), "providers": {}}
+    out = {"provider": provider(), "enabled": is_enabled(), "providers": {}}
     for p, meta in PROVIDERS.items():
         key = api_key(p)
         out["providers"][p] = {"label": meta["label"], "model": model(p), "default_model": meta["default_model"],

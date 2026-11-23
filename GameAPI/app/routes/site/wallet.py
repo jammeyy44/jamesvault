@@ -30,10 +30,10 @@ def _parse_amount(raw):
 
 
 def _provider_methods(payments):
-    """Method lists come from the provider (they change as methods are enabled). Cached for 60s; balances never are."""
+    """Method lists come from the provider (they change rarely). Cached for 10 minutes so the wallet opens fast; balances never are."""
     now = time.monotonic()
     mode = payments_mode()
-    if _methods_cache["data"] is not None and _methods_cache["mode"] == mode and now - _methods_cache["at"] < 60:
+    if _methods_cache["data"] is not None and _methods_cache["mode"] == mode and now - _methods_cache["at"] < 600:
         return _methods_cache["data"]
     data = payments.methods()
     _methods_cache.update(at=now, mode=mode, data=data)

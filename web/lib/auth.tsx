@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { MINUTE, cachedApi, peekCached } from "./cache";
 import { api, type Player } from "./api";
 
 type SiteConfig = {
@@ -41,7 +42,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refresh();
-    api<SiteConfig>("/site/config").then(setConfig).catch(() => {});
+    const saved = peekCached<SiteConfig>("/site/config");
+    if (saved) setConfig(saved);
+    cachedApi<SiteConfig>("/site/config", 10 * MINUTE).then(setConfig).catch(() => {});
   }, [refresh]);
 
   const logout = useCallback(async () => {

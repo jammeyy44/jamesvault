@@ -8,6 +8,7 @@ import { GameAccessModal } from "./game-access";
 import { EmptyState, ErrorState, Notice, Skeleton } from "./ui/bits";
 import { Button } from "./ui/button";
 import { api, errorMessage, type Game } from "@/lib/api";
+import { readSaved, save } from "@/lib/cache";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +37,7 @@ export function GameGrid({ featuredOnly = false, limit = 12, compact = false }: 
   useEffect(() => { const t = setTimeout(() => { setQuery(search); setPage(1); }, 300); return () => clearTimeout(t); }, [search]);
 
   const load = useCallback(async () => {
-    setLoading(true); setError(null);
+    setError(null);
     const qs = new URLSearchParams({ page: String(page), per_page: String(limit) });
     if (query) qs.set("search", query);
     if (provider) qs.set("provider", provider);
@@ -44,11 +45,16 @@ export function GameGrid({ featuredOnly = false, limit = 12, compact = false }: 
     if (featuredOnly) qs.set("featured", "1");
     if (favorites) qs.set("favorites", "1");
     if (newOnly) qs.set("new", "1");
+    const key = `games:${player?.id ?? 0}:${qs}`;
+    const saved = page === 1 ? readSaved<Result>(key) : null;
+    if (saved) { setItems(saved.items); setMeta({ total: saved.total, providers: saved.providers, categories: saved.categories }); setLoading(false); }
+    else setLoading(true);
     try {
       const r = await api<Result>(`/games?${qs}`);
+      if (page === 1) save(key, r);
       setItems((prev) => (page === 1 ? r.items : [...prev, ...r.items]));
       setMeta({ total: r.total, providers: r.providers, categories: r.categories });
-    } catch (e) { setError(errorMessage(e)); } finally { setLoading(false); }
+    } catch (e) { if (!saved) setError(errorMessage(e)); } finally { setLoading(false); }
   }, [page, query, provider, category, featuredOnly, favorites, newOnly, limit, player?.id]);
 
   useEffect(() => { load(); }, [load]);

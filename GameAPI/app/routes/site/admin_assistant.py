@@ -37,7 +37,9 @@ def admin_assistant_put():
         if not key.startswith(prefix):
             return json_error(f"A {cfg.PROVIDERS[p]['label']} key starts with {prefix}")
     cfg.save(p, model, key or None, current_player().id)
-    audit("assistant.settings_update", target=p, detail={"model": model, "key_changed": bool(key)})  # never the key
+    if isinstance(d.get('enabled'), bool):
+        cfg.set_enabled(d['enabled'], current_player().id)
+    audit("assistant.settings_update", target=p, detail={"model": model, "key_changed": bool(key), "enabled": d.get('enabled')})  # never the key
     db.session.commit()
     return jsonify(cfg.public_view())
 

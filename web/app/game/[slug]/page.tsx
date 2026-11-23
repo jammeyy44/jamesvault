@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowLeft, ArrowRight, Check, Copy, Download, Eye, EyeOff, FileText, FlaskConical, Gift, Info,
-  KeyRound, Lock, MailCheck, Pencil, RefreshCw, Sparkles, Trash2, X
+  ArrowLeft, ArrowRight, ArrowUpRight, Check, Copy, Download, Eye, EyeOff, FileText, FlaskConical, Gift, Info,
+  KeyRound, Lock, MailCheck, Pencil, Plus, RefreshCw, ShieldCheck, Sparkles, Trash2, X, Zap
 } from "lucide-react";
 import { api, ApiError, errorMessage, type Game } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -16,6 +16,7 @@ import { TestYourLuckBanner } from "@/components/test-your-luck";
 import { CashoutLimitsModal } from "@/components/cashout-limits-modal";
 import { GameArt } from "@/components/game-art";
 import { Transactions } from "@/components/transactions";
+import { MINUTE, cachedApi, getUserCached, setUserCached } from "@/lib/cache";
 import { cn } from "@/lib/utils";
 
 type Access = {
@@ -115,7 +116,7 @@ export default function FullscreenGamePage() {
   useEffect(() => { try { localStorage.setItem("jv-last-game", slug); } catch { /* private mode */ } }, [slug]);
   const search = useSearchParams();
   const appliedSig = useRef("");
-  useEffect(() => { appliedSig.current = ""; setStep("dashboard"); setAccess(null); }, [slug]); // switching game starts that game fresh
+  useEffect(() => { appliedSig.current = ""; setStep("dashboard"); setAccess(getUserCached<Access>(`access:${slug}`)); }, [slug]); // switching game starts that game fresh
   useEffect(() => {
     // ?add=1 opens Add Cash and ?cashout=1 opens Cash Out, every time the URL changes (also when this game is already open)
     if (!access?.account) return;
@@ -130,6 +131,7 @@ export default function FullscreenGamePage() {
     try {
       const res = await api<Access>(`/games/${slug}/access`);
       setAccess(res);
+      setUserCached(`access:${slug}`, res);
       setError(null);
     } catch (e) {
       setError(errorMessage(e));
@@ -197,204 +199,196 @@ export default function FullscreenGamePage() {
   return (
     <div className="min-h-screen bg-[#070A12] text-white flex flex-col pb-16">
       
-      {/* Top Header Bar matching user's screenshot */}
-      <div className="sticky top-0 z-30 border-b border-white/10 bg-[#0c101c]/95 backdrop-blur-md px-4 sm:px-8 py-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="grid h-2.5 w-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
-          <h1 className="text-sm font-black uppercase tracking-wider text-slate-200">
-            {currentGame.name}
-          </h1>
+      {/* Top bar: which game, online, close */}
+      <div className="sticky top-0 z-30 border-b border-white/10 bg-[#0b0f1c]/85 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <GameArt game={currentGame} className="h-9 w-9 shrink-0 rounded-xl border border-white/15 [container-type:size]" />
+            <div className="min-w-0">
+              <h1 className="truncate text-sm font-black tracking-wide text-white sm:text-base">{currentGame.name}</h1>
+              <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-emerald-300">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)]" />Online
+              </p>
+            </div>
+          </div>
+          <button onClick={() => router.push("/games")} aria-label="Close and return to games"
+            className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
         </div>
-
-        <button
-          onClick={() => router.push("/games")}
-          aria-label="Close and return to games"
-          className="grid h-9 w-9 place-items-center rounded-xl border border-white/10 bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 transition">
-          <X className="h-5 w-5" />
-        </button>
       </div>
 
-      {/* Main Fullscreen Body */}
-      <div className="container-x w-full max-w-6xl py-6 sm:py-8 flex-1">
-        
+      {/* Main body */}
+      <div className="container-x w-full max-w-6xl flex-1 py-5 sm:py-8">
+
         {step === "dashboard" && (
-          <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6 items-start">
-            
-            {/* LEFT COLUMN: Game Profile Card (Screenshots 1, 2, 3) */}
-            <div className="rounded-3xl border border-white/10 bg-[#121829] p-5 sm:p-7 shadow-2xl flex flex-col">
-              
-              {/* Full-bleed game artwork poster */}
-              <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl bg-slate-900 border border-white/10 shadow-lg">
-                <GameArt game={currentGame} label className="group h-full w-full [container-type:size]" />
-              </div>
+          <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[400px_1fr] lg:gap-6">
 
-              {/* Title row with Mint Green circular play button */}
-              <div className="mt-5 flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="text-2xl font-black text-white tracking-tight truncate">
-                    {currentGame.name}
-                  </h2>
-                  <p className="text-xs text-slate-400 font-semibold truncate mt-0.5">
-                    {currentGame.category || "Slots, Table Games"}
-                  </p>
+            {/* LEFT COLUMN: the game, its balance and the player's login */}
+            <div className="flex flex-col gap-4">
+
+              {/* Hero: artwork on a glow of its own colours */}
+              <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-[#0f1424] shadow-2xl">
+                <div className="pointer-events-none absolute inset-0 scale-125 opacity-40 blur-3xl" aria-hidden>
+                  <GameArt game={currentGame} className="h-full w-full [container-type:size]" />
                 </div>
-
-                {/* Download the game: the link set in Admin -> Game catalog -> "Download link". Hidden until one is set. */}
-                {access?.game.download_url && (
-                  <a
-                    href={access.game.download_url} target="_blank" rel="noopener noreferrer" download
-                    aria-label={`Download ${currentGame.name}`} title={`Download ${currentGame.name}`} data-testid="download-game"
-                    className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#38bdf8] to-[#3b82f6] text-white shadow-[0_6px_22px_rgba(56,189,248,0.45)] ring-1 ring-white/25 transition hover:scale-105 hover:brightness-110 active:scale-95">
-                    <Download className="h-5 w-5" strokeWidth={2.2} />
-                  </a>
-                )}
-              </div>
-
-              <hr className="my-5 border-white/10" />
-
-              {checking && (
-                <div className="space-y-3 animate-pulse" aria-busy="true" aria-label="Checking your login" data-testid="access-checking">
-                  <div className="h-12 w-1/2 rounded-xl bg-white/[0.07]" />
-                  <div className="grid grid-cols-2 gap-3"><div className="h-11 rounded-xl bg-white/[0.07]" /><div className="h-11 rounded-xl bg-white/[0.07]" /></div>
-                  <div className="h-12 rounded-xl bg-white/[0.07]" />
-                  <div className="h-12 rounded-xl bg-white/[0.07]" />
-                </div>
-              )}
-
-              {/* State A: the player has no login yet (shown only once we KNOW that) */}
-              {!checking && !hasAccount && (
-                <div className="space-y-4">
-                  {/* Blue info notice box */}
-                  <div className="flex items-center gap-3 rounded-2xl border border-sky-400/25 bg-sky-500/15 p-4 text-xs sm:text-sm text-sky-200">
-                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-sky-400 text-slate-950 text-xs font-black">
-                      i
-                    </span>
-                    <span>
-                      {busy
-                        ? "Your login request is being executed.."
-                        : "You don't have an account, get your access right now"}
-                    </span>
-                  </div>
-
-                  {error && (
-                    <p role="alert" className="rounded-2xl bg-rose-500/15 border border-rose-500/20 p-3 text-xs text-rose-200">
-                      {error}
-                    </p>
-                  )}
-
-                  {/* Sky blue Get access button with animated loading dots */}
-                  <button
-                    onClick={handleGetAccess}
-                    disabled={busy}
-                    className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-sm transition hover:scale-[1.02] active:scale-95 disabled:opacity-60 shadow-[0_8px_25px_rgba(56,189,248,0.4)]">
-                    {busy ? (
-                      <span className="flex items-center gap-1.5 py-1">
-                        <span className="h-2 w-2 rounded-full bg-slate-950 animate-bounce" />
-                        <span className="h-2 w-2 rounded-full bg-slate-950 animate-bounce [animation-delay:0.15s]" />
-                        <span className="h-2 w-2 rounded-full bg-slate-950 animate-bounce [animation-delay:0.3s]" />
-                      </span>
-                    ) : (
-                      <>
-                        <KeyRound className="h-4 w-4" /> Get access
-                      </>
-                    )}
-                  </button>
-                </div>
-              )}
-
-              {/* State B: User HAS an account (Exact match for Screenshots 1 & 2) */}
-              {hasAccount && (
-                <div className="space-y-4">
-                  {/* Balance section */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-3xl font-black text-white tabular-nums tracking-tight">
-                        {balance ? money2(balance.amount) : "$0.00"}
-                      </p>
-                      <p className="text-xs text-slate-400 font-semibold mt-0.5">Balance</p>
+                <div className="relative p-3.5 sm:p-5">
+                  <div className="relative aspect-[16/10] w-full overflow-hidden rounded-2xl border border-white/15 shadow-[0_18px_40px_rgba(0,0,0,0.5)]">
+                    <GameArt game={currentGame} className="group h-full w-full [container-type:size]" />
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                    <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-3 p-4">
+                      <div className="min-w-0">
+                        <h2 className="truncate text-2xl font-black tracking-tight text-white drop-shadow-lg sm:text-[1.75rem]">{currentGame.name}</h2>
+                        <p className="mt-0.5 truncate text-xs font-semibold text-white/75">{currentGame.category || "Slots, Table Games"}</p>
+                      </div>
+                      {/* Download the game: the link set in Admin -> Game catalog -> "Download link". Hidden until one is set. */}
+                      {access?.game.download_url && (
+                        <a href={access.game.download_url} target="_blank" rel="noopener noreferrer" download
+                          aria-label={`Download ${currentGame.name}`} title={`Download ${currentGame.name}`} data-testid="download-game"
+                          className="grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#38bdf8] to-[#3b82f6] text-white shadow-[0_6px_22px_rgba(56,189,248,0.55)] ring-2 ring-white/25 transition hover:scale-105 hover:brightness-110 active:scale-95">
+                          <Download className="h-5 w-5" strokeWidth={2.2} />
+                        </a>
+                      )}
                     </div>
+                  </div>
+                  <div className="mt-3.5 flex flex-wrap gap-2 text-[11px] font-bold">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-emerald-300"><Zap className="h-3 w-3" />Instant loads</span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-sky-400/25 bg-sky-400/10 px-2.5 py-1 text-sky-300"><ShieldCheck className="h-3 w-3" />Secure login</span>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-300/25 bg-amber-300/10 px-2.5 py-1 text-amber-200"><Gift className="h-3 w-3" />Bonus on every add</span>
+                  </div>
+                </div>
+              </div>
 
-                    <button
-                      onClick={refreshBalance}
-                      aria-label="Refresh balance"
-                      className="flex items-center gap-2 text-right text-xs text-slate-400 hover:text-white transition group">
-                      <RefreshCw className={cn("h-4 w-4 text-slate-300 transition-transform", refreshing && "animate-spin")} />
-                      <div>
-                        <p className="text-[10px] text-slate-400 font-medium">Last update</p>
-                        <p className="font-bold text-slate-300 text-[11px]">
-                          {balance ? new Date(balance.at).toLocaleDateString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "27 Oct 10:46 AM"}
+              {/* Account card */}
+              <div className="rounded-3xl border border-white/10 bg-gradient-to-b from-[#141b2f] to-[#0f1424] p-4 shadow-2xl sm:p-5">
+                {checking && (
+                  <div className="space-y-3 animate-pulse" aria-busy="true" aria-label="Checking your login" data-testid="access-checking">
+                    <div className="h-24 rounded-2xl bg-white/[0.07]" />
+                    <div className="grid grid-cols-2 gap-3"><div className="h-12 rounded-2xl bg-white/[0.07]" /><div className="h-12 rounded-2xl bg-white/[0.07]" /></div>
+                    <div className="h-28 rounded-2xl bg-white/[0.07]" />
+                  </div>
+                )}
+
+                {/* No login yet (shown only once we KNOW that) */}
+                {!checking && !hasAccount && (
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3.5">
+                      <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-[#38bdf8] to-[#6366f1] shadow-[0_8px_22px_rgba(56,189,248,0.35)]"><KeyRound className="h-5 w-5 text-white" /></span>
+                      <div className="min-w-0">
+                        <p className="text-base font-black text-white">Get your {currentGame.name} login</p>
+                        <p className="mt-0.5 text-xs leading-relaxed text-slate-400">
+                          {busy ? "Your login request is being executed.." : "You don't have an account, get your access right now"}
                         </p>
                       </div>
+                    </div>
+                    {error && <p role="alert" className="rounded-2xl border border-rose-500/20 bg-rose-500/15 p-3 text-xs text-rose-200">{error}</p>}
+                    <button onClick={handleGetAccess} disabled={busy}
+                      className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#38bdf8] to-[#3b82f6] text-sm font-black text-slate-950 shadow-[0_10px_26px_rgba(56,189,248,0.4)] transition hover:brightness-110 active:scale-[0.98] disabled:opacity-60">
+                      {busy ? (
+                        <span className="flex items-center gap-1.5 py-1">
+                          <span className="h-2 w-2 animate-bounce rounded-full bg-slate-950" />
+                          <span className="h-2 w-2 animate-bounce rounded-full bg-slate-950 [animation-delay:0.15s]" />
+                          <span className="h-2 w-2 animate-bounce rounded-full bg-slate-950 [animation-delay:0.3s]" />
+                        </span>
+                      ) : (<><KeyRound className="h-4 w-4" /> Get access</>)}
                     </button>
                   </div>
+                )}
 
-                  {balanceError && <p className="text-xs text-amber-200">{balanceError}</p>}
-
-                  {/* Add Cash & Cash Out buttons row */}
-                  <div className="grid grid-cols-2 gap-3 pt-1">
-                    <button
-                      onClick={() => setStep("cash")}
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#38bdf8] hover:bg-[#0ea5e9] text-slate-950 font-black text-xs sm:text-sm shadow-sm transition hover:scale-[1.02] active:scale-95">
-                      <span className="grid h-5 w-5 place-items-center rounded-full bg-slate-950/15 text-slate-950 text-[10px] font-black">
-                        $
-                      </span>
-                      Add Cash
-                    </button>
-
-                    <button
-                      onClick={() => setStep("redeem")}
-                      className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-[#182035] hover:bg-[#1f2942] text-white font-bold text-xs sm:text-sm transition hover:scale-[1.02] active:scale-95">
-                      <span className="grid h-5 w-5 place-items-center rounded-full bg-white/10 text-white text-[10px] font-bold">
-                        $
-                      </span>
-                      Cash Out
-                    </button>
-                  </div>
-
-                  {/* Login details, always visible: username + password (eye to show, copy) */}
-                  {credError && <p role="alert" className="rounded-xl bg-rose-500/15 p-3 text-xs text-rose-200">{credError}</p>}
-                  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#182035] px-4 py-3.5">
-                    <span className="font-mono text-sm font-bold text-slate-200" data-testid="field-username">{creds?.username ?? access?.account?.username}</span>
-                    <button type="button" aria-label="Copy username" onClick={() => access?.account && copyUsername(creds?.username ?? access.account.username)}
-                      className="p-1 text-slate-400 transition hover:text-white">
-                      {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                    </button>
-                  </div>
-                  <div className="flex items-center justify-between rounded-xl border border-white/10 bg-[#182035] px-4 py-3.5">
-                    <span className="font-mono text-sm font-bold text-slate-200" data-testid="field-password">{!creds ? "••••••" : showPass ? creds.password : "••••••"}</span>
-                    <span className="flex items-center gap-2 text-slate-400">
-                      <button type="button" onClick={() => setShowPass((v) => !v)} aria-label={showPass ? "Hide password" : "Show password"} className="p-1 transition hover:text-white">
-                        {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                      <button type="button" aria-label="Copy password" onClick={copyPassword} className="p-1 transition hover:text-white">
-                        {copiedPass ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                      </button>
-                    </span>
-                  </div>
-
-                  {note && (
-                    <p role={note.tone === "error" ? "alert" : "status"} className={"rounded-xl p-3 text-xs " + (note.tone === "error" ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-100")}>{note.text}</p>
-                  )}
-                  {confirming ? (
-                    <div className="rounded-xl border border-white/15 bg-black/20 p-3" data-testid="confirm-box">
-                      <p className="text-xs text-slate-200">{confirming === "reset" ? "Set a new password for this login? The old one stops working." : "Remove this login from your list? The game balance must be $0.00. You can get a new login later."}</p>
-                      <div className="mt-3 grid grid-cols-2 gap-2">
-                        <button disabled={working} data-testid="confirm-yes" onClick={confirming === "reset" ? resetPassword : removeLogin}
-                          className={"inline-flex h-10 items-center justify-center gap-2 rounded-xl text-xs font-black transition disabled:opacity-50 " + (confirming === "reset" ? "bg-[#38bdf8] text-slate-950 hover:bg-[#0ea5e9]" : "bg-rose-500 text-white hover:bg-rose-400")}>
-                          {working && <Spinner className="h-3.5 w-3.5" />}{confirming === "reset" ? "Reset" : "Remove"}
+                {/* The player has a login */}
+                {hasAccount && (
+                  <div className="space-y-4">
+                    <div className="relative overflow-hidden rounded-2xl border border-sky-400/20 bg-gradient-to-br from-[#17284d] via-[#121a33] to-[#0f1424] p-4">
+                      <div className="pointer-events-none absolute -right-10 -top-12 h-32 w-32 rounded-full bg-sky-400/20 blur-2xl" aria-hidden />
+                      <div className="relative flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-sky-300/80">Game balance</p>
+                          <p className="mt-1 text-[2.15rem] font-black leading-none tracking-tight text-white tabular-nums">
+                            {balance ? money2(balance.amount) : "$0.00"}
+                          </p>
+                          <p className="mt-2 text-[11px] text-slate-400"><span className="sr-only">Balance. </span>
+                            Updated {balance ? new Date(balance.at).toLocaleDateString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "just now"}
+                          </p>
+                        </div>
+                        <button onClick={refreshBalance} aria-label="Refresh balance" title="Refresh balance"
+                          className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-white/5 text-slate-300 transition hover:bg-white/10 hover:text-white">
+                          <RefreshCw className={cn("h-4 w-4 transition-transform", refreshing && "animate-spin")} />
                         </button>
-                        <button disabled={working} onClick={() => setConfirming(null)} className="h-10 rounded-xl border border-white/20 text-xs font-bold text-white hover:bg-white/10">Cancel</button>
                       </div>
                     </div>
-                  ) : (
-                    <div className="flex gap-2">
-                      <button onClick={() => { setNote(null); setConfirming("reset"); }} className="h-12 flex-1 rounded-xl border border-white/15 bg-transparent text-sm font-semibold text-slate-200 transition hover:bg-white/5">Reset password</button>
-                      <button onClick={() => { setNote(null); setConfirming("remove"); }} aria-label="Remove login" data-testid="remove-login"
-                        className="grid h-12 w-14 place-items-center rounded-xl bg-rose-500/20 text-rose-400 transition hover:bg-rose-500/30"><Trash2 className="h-5 w-5" /></button>
+
+                    {balanceError && <p className="text-xs text-amber-200">{balanceError}</p>}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <button onClick={() => setStep("cash")}
+                        className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#38bdf8] to-[#3b82f6] text-sm font-black text-slate-950 shadow-[0_10px_24px_rgba(56,189,248,0.35)] transition hover:brightness-110 active:scale-[0.97]">
+                        <Plus className="h-4 w-4" strokeWidth={3} /> Add Cash
+                      </button>
+                      <button onClick={() => setStep("redeem")}
+                        className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/[0.06] text-sm font-bold text-white transition hover:border-white/25 hover:bg-white/10 active:scale-[0.97]">
+                        <ArrowUpRight className="h-4 w-4" strokeWidth={2.5} /> Cash Out
+                      </button>
                     </div>
-                  )}
-                </div>
-              )}
+
+                    {/* Login details: username + password (eye to show, copy) */}
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3.5">
+                      <p className="mb-2.5 flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400"><KeyRound className="h-3.5 w-3.5 text-sky-300" />Your login</p>
+                      {credError && <p role="alert" className="mb-2 rounded-xl bg-rose-500/15 p-3 text-xs text-rose-200">{credError}</p>}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0c1120] px-3.5 py-3">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Username</p>
+                            <p className="truncate font-mono text-sm font-bold text-slate-100" data-testid="field-username">{creds?.username ?? access?.account?.username}</p>
+                          </div>
+                          <button type="button" aria-label="Copy username" onClick={() => access?.account && copyUsername(creds?.username ?? access.account.username)}
+                            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white">
+                            {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-[#0c1120] px-3.5 py-3">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Password</p>
+                            <p className="truncate font-mono text-sm font-bold text-slate-100" data-testid="field-password">{!creds ? "••••••" : showPass ? creds.password : "••••••"}</p>
+                          </div>
+                          <span className="flex shrink-0 items-center gap-1 text-slate-400">
+                            <button type="button" onClick={() => setShowPass((v) => !v)} aria-label={showPass ? "Hide password" : "Show password"} className="grid h-9 w-9 place-items-center rounded-lg transition hover:bg-white/10 hover:text-white">
+                              {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                            </button>
+                            <button type="button" aria-label="Copy password" onClick={copyPassword} className="grid h-9 w-9 place-items-center rounded-lg transition hover:bg-white/10 hover:text-white">
+                              {copiedPass ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                            </button>
+                          </span>
+                        </div>
+                      </div>
+
+                      {note && (
+                        <p role={note.tone === "error" ? "alert" : "status"} className={"mt-3 rounded-xl p-3 text-xs " + (note.tone === "error" ? "bg-rose-500/15 text-rose-200" : "bg-emerald-500/15 text-emerald-100")}>{note.text}</p>
+                      )}
+                      {confirming ? (
+                        <div className="mt-3 rounded-xl border border-white/15 bg-black/25 p-3" data-testid="confirm-box">
+                          <p className="text-xs text-slate-200">{confirming === "reset" ? "Set a new password for this login? The old one stops working." : "Remove this login from your list? The game balance must be $0.00. You can get a new login later."}</p>
+                          <div className="mt-3 grid grid-cols-2 gap-2">
+                            <button disabled={working} data-testid="confirm-yes" onClick={confirming === "reset" ? resetPassword : removeLogin}
+                              className={"inline-flex h-10 items-center justify-center gap-2 rounded-xl text-xs font-black transition disabled:opacity-50 " + (confirming === "reset" ? "bg-[#38bdf8] text-slate-950 hover:bg-[#0ea5e9]" : "bg-rose-500 text-white hover:bg-rose-400")}>
+                              {working && <Spinner className="h-3.5 w-3.5" />}{confirming === "reset" ? "Reset" : "Remove"}
+                            </button>
+                            <button disabled={working} onClick={() => setConfirming(null)} className="h-10 rounded-xl border border-white/20 text-xs font-bold text-white hover:bg-white/10">Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="mt-3 flex gap-2">
+                          <button onClick={() => { setNote(null); setConfirming("reset"); }}
+                            className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-white/15 text-sm font-semibold text-slate-200 transition hover:bg-white/5">
+                            <RefreshCw className="h-3.5 w-3.5" /> Reset password
+                          </button>
+                          <button onClick={() => { setNote(null); setConfirming("remove"); }} aria-label="Remove login" data-testid="remove-login"
+                            className="grid h-11 w-12 place-items-center rounded-xl border border-rose-400/20 bg-rose-500/10 text-rose-300 transition hover:bg-rose-500/20"><Trash2 className="h-4 w-4" /></button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* RIGHT COLUMN: Free Spin Card + Promo Banner + Transactions Area */}
@@ -582,7 +576,7 @@ function FullscreenCash({ state, onBack, onDone }: { state: Access; onBack: () =
   const [others, setOthers] = useState<{ slug: string; name: string; image_url: string | null }[]>([]);
   useEffect(() => {
     if (!gameHasBalance) return;
-    api<{ items: { slug: string; name: string; image_url: string | null }[] }>("/games?per_page=60")
+    cachedApi<{ items: { slug: string; name: string; image_url: string | null }[] }>("/games?per_page=60", 5 * MINUTE)
       .then((r) => setOthers(r.items.filter((g) => g.slug !== state.game.slug)))
       .catch(() => setOthers([]));
   }, [gameHasBalance, state.game.slug]);
