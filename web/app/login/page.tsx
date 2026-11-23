@@ -3,25 +3,26 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowRight, Lock, LogIn, Mail, Sparkles, User } from "lucide-react";
-import { AuthShell, Field } from "@/components/auth-shell";
-import { Notice, Spinner } from "@/components/ui/bits";
+import { ArrowRight, Lock, User } from "lucide-react";
+import { AuthShell, Field, SubmitButton } from "@/components/auth-shell";
+import { Notice } from "@/components/ui/bits";
 import { Button } from "@/components/ui/button";
-import { api, errorMessage } from "@/lib/api";
+import { api, errorMessage, type Player } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { afterAuthPath } from "@/lib/utils";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { player, loading, refresh } = useAuth();
+  const { player, loading, signedIn, refresh } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // If already logged in, go straight to the homepage (or the page they were sent here from)
+  // Warm up the page we will land on, so moving there after signing in is instant
+  useEffect(() => { router.prefetch(afterAuthPath()); }, [router]);
+
+  // Already signed in: go straight to the homepage (or the page they were sent here from)
   useEffect(() => {
-    if (!loading && player) {
-      router.replace(afterAuthPath());
-    }
+    if (!loading && player) router.replace(afterAuthPath());
   }, [player, loading, router]);
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -30,103 +31,44 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      const r = await api<{ player: { is_admin: boolean } }>("/auth/login", {
+      const r = await api<{ player: Player }>("/auth/login", {
         method: "POST",
-        body: { identifier: f.get("identifier"), password: f.get("password") },
+        body: { identifier: String(f.get("identifier") || "").trim(), password: f.get("password") },
       });
-      await refresh();
+      signedIn(r.player);           // no second request: the answer already says who signed in
       router.push(afterAuthPath());
+      void refresh();               // notifications count etc. load in the background
     } catch (err) {
       setError(errorMessage(err));
-    } finally {
       setBusy(false);
     }
   };
 
-  // While checking login state, or if already logged in, show sleek status
   if (!loading && player) {
     return (
-      <AuthShell title="Already Signed In" subtitle={`Welcome back, @${player.username}`}>
-        <div className="py-6 text-center space-y-4">
-          <p className="text-sm text-slate-300">You are already signed into your account. Redirecting...</p>
-          <div className="flex justify-center gap-3">
-            <Button asChild className="bg-gradient-to-r from-[#7c3aed] to-[#38bdf8] text-white font-bold">
-              <Link href="/">Go to home</Link>
-            </Button>
-          </div>
-        </div>
+      <AuthShell title="You're signed in" subtitle={`Welcome back, @${player.username}. Taking you in…`}>
+        <Button asChild className="h-12 w-full text-base font-bold"><Link href="/">Go to the homepage</Link></Button>
       </AuthShell>
     );
   }
 
   return (
     <AuthShell
-      title="Welcome Back"
-      subtitle="Sign in to continue your streak & unlock vault rewards."
-      badge="Member Portal"
-      footer={
-        <div className="space-y-2">
-          <p>
-            Don&apos;t have an account?{" "}
-            <Link className="font-bold text-sky-400 hover:text-sky-300 underline underline-offset-4 transition" href="/register">
-              Create an account
-            </Link>
-          </p>
-          <p className="text-xs text-slate-500">
-            Sign up takes less than 30 seconds.
-          </p>
-        </div>
-      }
+      showcase
+      title="Welcome back"
+      subtitle="Sign in to play, add cash and claim your bonuses."
+      footer={<p>New here? <Link className="font-bold text-sky-400 underline-offset-4 transition hover:text-sky-300 hover:underline" href="/register">Create a free account</Link></p>}
     >
-      <form onSubmit={submit} className="space-y-4">
+      <form onSubmit={submit} className="space-y-5" noValidate={false}>
         {error && <Notice tone="error">{error}</Notice>}
-
-        <Field
-          id="identifier"
-          label="Username or Email"
-          placeholder="your_username or email"
-          autoComplete="username"
-          required
-          icon={<User className="h-4 w-4" />}
-        />
-
-        <div className="space-y-1">
-          <Field
-            id="password"
-            label="Password"
-            type="password"
-            placeholder="••••••••••••"
-            autoComplete="current-password"
-            required
-            icon={<Lock className="h-4 w-4" />}
-          />
-          <div className="flex justify-end pt-1">
-            <Link
-              href="/forgot-password"
-              className="text-xs font-semibold text-slate-400 hover:text-sky-400 transition"
-            >
-              Forgot password?
-            </Link>
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={busy}
-          className="group relative mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#7c3aed] via-[#6366f1] to-[#38bdf8] px-6 text-sm font-black tracking-wide text-white shadow-[0_4px_25px_rgba(124,58,237,0.4)] transition hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
-        >
-          {busy ? (
-            <>
-              <Spinner className="h-4 w-4 text-white" />
-              <span>Signing in…</span>
-            </>
-          ) : (
-            <>
-              <span>Sign In to Account</span>
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </>
-          )}
-        </button>
+        <Field id="identifier" label="Username or email" placeholder="Your username or email" autoComplete="username" autoCapitalize="none"
+          spellCheck={false} required icon={<User className="h-5 w-5" />} />
+        <Field id="password" label="Password" type="password" placeholder="Your password" autoComplete="current-password" required
+          icon={<Lock className="h-5 w-5" />}
+          aside={<Link href="/forgot-password" className="text-sm font-semibold text-sky-400 transition hover:text-sky-300">Forgot password?</Link>} />
+        <SubmitButton busy={busy} busyLabel="Signing in">
+          Sign in <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+        </SubmitButton>
       </form>
     </AuthShell>
   );

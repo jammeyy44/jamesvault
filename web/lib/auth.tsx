@@ -15,11 +15,13 @@ type AuthState = {
   unread: number;
   config: SiteConfig | null;
   refresh: () => Promise<void>;
+  /** Use the player the sign-in / sign-up answer already returned: no extra round trip before moving on. */
+  signedIn: (p: Player) => void;
   logout: () => Promise<void>;
 };
 
 const Ctx = createContext<AuthState>({
-  player: null, loading: true, unread: 0, config: null, refresh: async () => {}, logout: async () => {},
+  player: null, loading: true, unread: 0, config: null, refresh: async () => {}, signedIn: () => {}, logout: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -47,13 +49,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     cachedApi<SiteConfig>("/site/config", 10 * MINUTE).then(setConfig).catch(() => {});
   }, [refresh]);
 
+  const signedIn = useCallback((p: Player) => { setPlayer(p); setLoading(false); }, []);
+
   const logout = useCallback(async () => {
     await api("/auth/logout", { method: "POST" }).catch(() => {});
     setPlayer(null);
     setUnread(0);
   }, []);
 
-  return <Ctx.Provider value={{ player, loading, unread, config, refresh, logout }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ player, loading, unread, config, refresh, signedIn, logout }}>{children}</Ctx.Provider>;
 }
 
 export const useAuth = () => useContext(Ctx);

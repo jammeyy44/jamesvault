@@ -116,7 +116,7 @@ export default function AdminPage() {
   const role = player.role as Exclude<Role, "player">;
 
   return (
-    <div className="container-x py-8">
+    <div className="container-x py-6 text-[15px] sm:py-8">
       <div className="relative mb-6 overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-r from-[#1b1740] via-[#121a36] to-[#0e1a2e] p-5 sm:p-6 shadow-card">
         <div className="pointer-events-none absolute -right-10 -top-16 h-52 w-52 rounded-full bg-purple-500/20 blur-3xl" />
         <div className="relative flex flex-wrap items-center justify-between gap-4">
@@ -130,8 +130,8 @@ export default function AdminPage() {
           <Button variant="secondary" size="sm" onClick={async () => { await logout(); router.push("/"); }}><LogOut className="h-4 w-4" />Sign out</Button>
         </div>
       </div>
-      <div className="grid gap-6 lg:grid-cols-[15rem_1fr]">
-        <nav className="lg:sticky lg:top-24 lg:self-start" aria-label="Admin sections">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <nav className="sticky top-16 z-20 -mx-3 min-w-0 bg-[#0B0E17]/95 px-3 py-2 backdrop-blur lg:top-24 lg:mx-0 lg:self-start lg:bg-transparent lg:p-0 lg:backdrop-blur-none" aria-label="Admin sections">
           <div className="flex gap-2 overflow-x-auto pb-1 lg:flex-col lg:gap-4 lg:overflow-visible lg:rounded-3xl lg:border lg:border-white/10 lg:bg-[#0F1424] lg:p-3 lg:shadow-card">
             {NAV_GROUPS.map(([group, keys]) => {
               const visible = keys.filter((k) => ROLE_TABS[role].includes(k));
@@ -144,7 +144,7 @@ export default function AdminPage() {
                     const on = tab === k;
                     return (
                       <button key={k} onClick={() => setTab(k)} aria-current={on}
-                        className={cn("group relative flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-xl px-3.5 py-2.5 text-left text-sm font-semibold transition",
+                        className={cn("group relative flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-xl px-4 py-2.5 text-left text-[15px] font-semibold transition",
                           on ? "bg-gradient-to-r from-[#7C3AED] to-[#4F46E5] text-white shadow-lift" : "text-slate-300 hover:bg-white/5 hover:text-white")}>
                         <Icon className={cn("h-4 w-4 shrink-0", on ? "text-white" : "text-slate-500 group-hover:text-sky-300")} />
                         {labelFor(k)}
@@ -228,9 +228,27 @@ function Cell({ v, col }: { v: any; col?: string }) {
 
 function Table({ columns, rows, actions }: { columns: string[]; rows: any[]; actions?: (row: any) => React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-2xl border border-white/10 bg-[#0F1424] shadow-card">
-      <table className="w-full text-left text-sm">
-        <thead><tr className="border-b border-white/10 bg-[#141B2E] text-[11px] uppercase tracking-wider text-slate-400">
+    <>
+    {/* Phones: one card per row, every field labelled, actions full width at the bottom */}
+    <ul className="space-y-3 md:hidden">
+      {rows.map((r) => (
+        <li key={r.id} className="rounded-2xl border border-white/10 bg-[#0F1424] p-4 shadow-card">
+          <dl className="space-y-2">
+            {columns.map((c, i) => (
+              <div key={c} className={cn("flex items-start justify-between gap-4", i === 0 && "border-b border-white/10 pb-2.5")}>
+                <dt className="shrink-0 text-xs font-bold uppercase tracking-wider text-slate-500">{c.replace(/_/g, " ")}</dt>
+                <dd className={cn("min-w-0 break-words text-right text-[15px] text-slate-100", i === 0 && "font-bold text-white")}><Cell v={r[c]} col={c} /></dd>
+              </div>
+            ))}
+          </dl>
+          {actions && <div className="mt-3.5 flex flex-wrap justify-end gap-2 border-t border-white/10 pt-3.5 [&_button]:min-h-[40px]">{actions(r)}</div>}
+        </li>
+      ))}
+    </ul>
+    {/* Larger screens: the table */}
+    <div className="hidden overflow-x-auto rounded-2xl border border-white/10 bg-[#0F1424] shadow-card md:block">
+      <table className="w-full text-left text-[15px]">
+        <thead><tr className="border-b border-white/10 bg-[#141B2E] text-xs uppercase tracking-wider text-slate-400">
           {columns.map((c) => <th key={c} className="whitespace-nowrap px-4 py-3 font-bold">{c.replace(/_/g, " ")}</th>)}{actions && <th />}
         </tr></thead>
         <tbody className="divide-y divide-white/5">
@@ -240,6 +258,7 @@ function Table({ columns, rows, actions }: { columns: string[]; rows: any[]; act
         </tbody>
       </table>
     </div>
+    </>
   );
 }
 
@@ -348,7 +367,7 @@ function MiniTable({ title, cols, rows }: { title: string; cols: [string, string
     <section>
       <h4 className="mb-2 flex items-center gap-2 text-sm font-extrabold text-white"><span className="h-4 w-1 rounded-full bg-gradient-to-b from-[#8B5CF6] to-[#38BDF8]" />{title} <span className="rounded-full bg-white/10 px-2 py-0.5 text-[11px] font-bold text-slate-300">{rows.length}</span></h4>
       {rows.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 px-4 py-3 text-sm text-slate-500">Nothing yet.</p> : (
-        <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#0C1120]"><table className="w-full text-left text-xs">
+        <div className="overflow-x-auto rounded-xl border border-white/10 bg-[#0C1120]"><table className="w-full text-left text-[13px] sm:text-sm">
           <thead><tr className="border-b border-white/10 bg-[#141B2E] uppercase tracking-wider text-slate-400">{cols.map(([, h]) => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}</tr></thead>
           <tbody className="divide-y divide-white/5">{rows.map((r, i) => <tr key={i} className="hover:bg-white/[0.03]">{cols.map(([k]) => <td key={k} className="px-3 py-2 text-slate-200"><Cell v={r[k]} col={k} /></td>)}</tr>)}</tbody>
         </table></div>

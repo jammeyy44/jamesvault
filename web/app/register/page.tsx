@@ -3,27 +3,27 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
-import { ArrowRight, Gift, Lock, Mail, Sparkles, User } from "lucide-react";
-import { AuthShell, Field } from "@/components/auth-shell";
-import { Notice, Spinner } from "@/components/ui/bits";
+import { ArrowRight, Gift, Lock, Mail, User } from "lucide-react";
+import { AuthShell, Field, SubmitButton } from "@/components/auth-shell";
+import { Notice } from "@/components/ui/bits";
 import { Button } from "@/components/ui/button";
-import { api, errorMessage } from "@/lib/api";
+import { api, errorMessage, type Player } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { afterAuthPath } from "@/lib/utils";
 
 function RegisterForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const { player, loading, refresh, config } = useAuth();
+  const { player, loading, signedIn, refresh, config } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const minAge = config?.brand.min_age ?? 18;
+  const ref = params.get("ref") ?? "";
+  const [showRef, setShowRef] = useState(!!ref);
 
-  // If already logged in, go straight to the homepage
+  useEffect(() => { router.prefetch(afterAuthPath()); }, [router]);
   useEffect(() => {
-    if (!loading && player) {
-      router.replace(afterAuthPath());
-    }
+    if (!loading && player) router.replace(afterAuthPath());
   }, [player, loading, router]);
 
   const submit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -32,152 +32,78 @@ function RegisterForm() {
     setBusy(true);
     setError(null);
     try {
-      await api("/auth/register", {
+      const r = await api<{ player: Player }>("/auth/register", {
         method: "POST",
         body: {
-          username: f.get("username"),
-          email: f.get("email"),
+          username: String(f.get("username") || "").trim(),
+          email: String(f.get("email") || "").trim(),
           password: f.get("password"),
-          referral_code: f.get("referral_code") || undefined,
+          referral_code: String(f.get("referral_code") || "").trim() || undefined,
           accept_terms: f.get("accept_terms") === "on",
         },
       });
-      await refresh();
+      signedIn(r.player);           // straight in, no extra request
       router.push(afterAuthPath());
+      void refresh();
     } catch (err) {
       setError(errorMessage(err));
-    } finally {
       setBusy(false);
     }
   };
 
-  // While checking login state, or if already logged in, show status
   if (!loading && player) {
     return (
-      <AuthShell title="Already Registered" subtitle={`Welcome, @${player.username}`}>
-        <div className="py-6 text-center space-y-4">
-          <p className="text-sm text-slate-300">You already have an active account session. Redirecting...</p>
-          <div className="flex justify-center gap-3">
-            <Button asChild className="bg-gradient-to-r from-[#7c3aed] to-[#38bdf8] text-white font-bold">
-              <Link href="/">Go to home</Link>
-            </Button>
-          </div>
-        </div>
+      <AuthShell title="You're all set" subtitle={`Welcome, @${player.username}. Taking you in…`}>
+        <Button asChild className="h-12 w-full text-base font-bold"><Link href="/">Go to the homepage</Link></Button>
       </AuthShell>
     );
   }
 
   return (
     <AuthShell
-      title="Create Account"
-      subtitle="Join thousands of players and claim your first mystery crate."
-      badge="Instant Registration"
-      footer={
-        <div className="space-y-2">
-          <p>
-            Already registered?{" "}
-            <Link className="font-bold text-sky-400 hover:text-sky-300 underline underline-offset-4 transition" href="/login">
-              Log in
-            </Link>
-          </p>
-        </div>
-      }
+      showcase
+      title="Create your account"
+      subtitle="Free and takes less than a minute."
+      footer={<p>Already have an account? <Link className="font-bold text-sky-400 underline-offset-4 transition hover:text-sky-300 hover:underline" href="/login">Sign in</Link></p>}
     >
       {config && !config.features.registration ? (
         <Notice>Registration is currently closed.</Notice>
       ) : (
-        <form onSubmit={submit} className="space-y-4">
+        <form onSubmit={submit} className="space-y-5">
           {error && <Notice tone="error">{error}</Notice>}
 
-          {/* Promotional Welcome Banner */}
-          <div className="flex items-center gap-2.5 rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-600/15 via-indigo-600/10 to-sky-500/15 p-3 text-xs text-violet-200">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-violet-500/30 text-amber-300 text-sm">
-              🎁
-            </span>
-            <span className="font-medium">
-              <strong className="text-white">Welcome Offer:</strong> Free daily quest diamonds + instant mystery crate unlocked upon email confirmation.
-            </span>
+          <div className="flex items-center gap-3 rounded-2xl border border-amber-300/25 bg-gradient-to-r from-amber-300/10 via-fuchsia-500/10 to-transparent p-3.5">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-[#f472d0] to-[#a21caf] text-white"><Gift className="h-5 w-5" /></span>
+            <p className="text-sm leading-snug text-slate-200"><b className="text-amber-200">Welcome bonus:</b> verify your email and get <b className="text-white">50% extra</b> on your first game add, then 10% on every add.</p>
           </div>
 
-          <Field
-            id="username"
-            label="Username"
-            placeholder="choose_username"
-            autoComplete="username"
-            required
-            minLength={3}
-            maxLength={30}
-            hint="3–30 letters, numbers or underscores."
-            icon={<User className="h-4 w-4" />}
-          />
+          <Field id="username" label="Username" placeholder="Pick a username" autoComplete="username" autoCapitalize="none" spellCheck={false}
+            required minLength={3} maxLength={30} pattern="[A-Za-z0-9_]{3,30}" title="3–30 letters, numbers or underscores"
+            hint="3–30 letters, numbers or underscores." icon={<User className="h-5 w-5" />} />
+          <Field id="email" label="Email" type="email" placeholder="you@example.com" autoComplete="email" inputMode="email" autoCapitalize="none"
+            spellCheck={false} required icon={<Mail className="h-5 w-5" />} />
+          <Field id="password" label="Password" type="password" placeholder="At least 6 characters" autoComplete="new-password" required minLength={6}
+            icon={<Lock className="h-5 w-5" />} />
 
-          <Field
-            id="email"
-            label="Email Address"
-            type="email"
-            placeholder="you@example.com"
-            autoComplete="email"
-            required
-            icon={<Mail className="h-4 w-4" />}
-          />
+          {showRef ? (
+            <Field id="referral_code" label="Referral code" placeholder="Friend's code (optional)" defaultValue={ref} autoComplete="off" autoCapitalize="characters"
+              icon={<Gift className="h-5 w-5" />} />
+          ) : (
+            <button type="button" onClick={() => setShowRef(true)} className="text-sm font-semibold text-sky-400 transition hover:text-sky-300">+ I have a referral code</button>
+          )}
 
-          <Field
-            id="password"
-            label="Password"
-            type="password"
-            placeholder="••••••••••••"
-            autoComplete="new-password"
-            required
-            minLength={6}
-            hint="At least 6 characters. Letters, numbers or symbols, anything you like."
-            icon={<Lock className="h-4 w-4" />}
-          />
-
-          <Field
-            id="referral_code"
-            label="Referral Code (Optional)"
-            placeholder="Enter friend's referral code"
-            defaultValue={params.get("ref") ?? ""}
-            autoComplete="off"
-            icon={<Gift className="h-4 w-4" />}
-          />
-
-          <label className="flex items-start gap-3 pt-1 text-xs text-slate-400 select-none cursor-pointer">
-            <input
-              type="checkbox"
-              name="accept_terms"
-              required
-              className="mt-0.5 h-4 w-4 rounded border-white/20 bg-[#131929] text-violet-600 focus:ring-violet-500 focus:ring-offset-0"
-            />
+          <label className="flex cursor-pointer select-none items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3.5 text-sm leading-relaxed text-slate-300">
+            <input type="checkbox" name="accept_terms" required className="mt-0.5 h-5 w-5 shrink-0 rounded border-white/20 bg-[#131929] accent-violet-500" />
             <span>
-              I certify that I am at least {minAge} years of age and agree to the{" "}
-              <Link className="font-bold text-sky-400 hover:underline" href="/legal/terms" target="_blank">
-                Terms of Service
-              </Link>{" "}
-              and{" "}
-              <Link className="font-bold text-sky-400 hover:underline" href="/legal/privacy" target="_blank">
-                Privacy Policy
-              </Link>.
+              I am at least {minAge} years old and agree to the{" "}
+              <Link className="font-semibold text-sky-400 hover:underline" href="/legal/terms" target="_blank">Terms</Link> and{" "}
+              <Link className="font-semibold text-sky-400 hover:underline" href="/legal/privacy" target="_blank">Privacy Policy</Link>.
             </span>
           </label>
 
-          <button
-            type="submit"
-            disabled={busy}
-            className="group relative mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-[#7c3aed] via-[#6366f1] to-[#38bdf8] px-6 text-sm font-black tracking-wide text-white shadow-[0_4px_25px_rgba(124,58,237,0.4)] transition hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
-          >
-            {busy ? (
-              <>
-                <Spinner className="h-4 w-4 text-white" />
-                <span>Creating Account…</span>
-              </>
-            ) : (
-              <>
-                <span>Create Account</span>
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-              </>
-            )}
-          </button>
+          <SubmitButton busy={busy} busyLabel="Creating your account">
+            Create account <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+          </SubmitButton>
         </form>
       )}
     </AuthShell>
@@ -185,9 +111,5 @@ function RegisterForm() {
 }
 
 export default function RegisterPage() {
-  return (
-    <Suspense>
-      <RegisterForm />
-    </Suspense>
-  );
+  return <Suspense><RegisterForm /></Suspense>;
 }
